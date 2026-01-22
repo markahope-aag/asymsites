@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+wpengine_key
+wpengine_key.pub
 
 # debug
 npm-debug.log*

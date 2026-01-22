@@ -6,10 +6,15 @@ export interface WPCLIConfig {
 }
 
 function getSSHConfig(installName: string): ConnectConfig {
-  const privateKey = process.env.WPENGINE_SSH_PRIVATE_KEY;
+  let privateKey = process.env.WPENGINE_SSH_PRIVATE_KEY;
 
   if (!privateKey) {
     throw new Error('WPENGINE_SSH_PRIVATE_KEY not configured');
+  }
+
+  // Handle escaped newlines from environment variables
+  if (privateKey.includes('\\n')) {
+    privateKey = privateKey.replace(/\\n/g, '\n');
   }
 
   return {
@@ -158,13 +163,13 @@ export async function getRevisionCount(config: WPCLIConfig) {
 }
 
 export async function getTransientCount(config: WPCLIConfig) {
-  const output = await runWPCLI(
-    config,
-    'db query "SELECT COUNT(*) as count FROM wp_options WHERE option_name LIKE \'_transient_%\'" --format=csv',
-    { format: 'table' }
-  );
-  const lines = output.trim().split('\n');
-  return parseInt(lines[lines.length - 1], 10) || 0;
+  try {
+    const output = await runWPCLI(config, 'transient list --format=count', { format: 'table' });
+    return parseInt(output.trim(), 10) || 0;
+  } catch {
+    // Fallback if transient list fails
+    return 0;
+  }
 }
 
 // Action commands (use with caution)

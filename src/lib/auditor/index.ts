@@ -5,7 +5,7 @@ import { runPerformanceChecks } from './checks/performance';
 import { runSecurityChecks } from './checks/security';
 import { runSEOChecks } from './checks/seo';
 import { calculateHealthScore } from './scoring';
-import { Site, CheckResult, AuditRawData } from '@/lib/types';
+import { CheckResult, AuditRawData } from '@/lib/types';
 
 export interface AuditResult {
   auditId: string;
@@ -14,7 +14,26 @@ export interface AuditResult {
   summary: string;
 }
 
-export async function runAudit(siteId: string): Promise<AuditResult> {
+const AUDIT_STEPS = [
+  { key: 'plugins', label: 'Checking plugins', percent: 20 },
+  { key: 'database', label: 'Analyzing database', percent: 40 },
+  { key: 'performance', label: 'Testing performance', percent: 60 },
+  { key: 'security', label: 'Security scan', percent: 80 },
+  { key: 'seo', label: 'SEO analysis', percent: 95 },
+  { key: 'complete', label: 'Finalizing', percent: 100 },
+];
+
+async function updateProgress(supabase: ReturnType<typeof createServerClient>, auditId: string, step: string, percent: number) {
+  await supabase
+    .from('audits')
+    .update({
+      summary: step,
+      raw_data: { progress: { step, percent } },
+    })
+    .eq('id', auditId);
+}
+
+export async function runAudit(siteId: string, existingAuditId?: string): Promise<AuditResult> {
   const supabase = createServerClient();
 
   // Get site details
@@ -28,19 +47,36 @@ export async function runAudit(siteId: string): Promise<AuditResult> {
     throw new Error(`Site not found: ${siteId}`);
   }
 
-  // Create audit record
-  const { data: audit, error: auditError } = await supabase
-    .from('audits')
-    .insert({
-      site_id: siteId,
-      status: 'running',
-      started_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
+  let audit: { id: string };
 
-  if (auditError || !audit) {
-    throw new Error(`Failed to create audit: ${auditError?.message}`);
+  if (existingAuditId) {
+    // Use existing audit record
+    audit = { id: existingAuditId };
+    await supabase
+      .from('audits')
+      .update({
+        status: 'running',
+        started_at: new Date().toISOString(),
+      })
+      .eq('id', existingAuditId);
+  } else {
+    // Create new audit record
+    const { data: newAudit, error: auditError } = await supabase
+      .from('audits')
+      .insert({
+        site_id: siteId,
+        status: 'running',
+        started_at: new Date().toISOString(),
+        summary: 'Starting audit...',
+        raw_data: { progress: { step: 'Starting audit...', percent: 0 } },
+      })
+      .select()
+      .single();
+
+    if (auditError || !newAudit) {
+      throw new Error(`Failed to create audit: ${auditError?.message}`);
+    }
+    audit = newAudit;
   }
 
   const allIssues: CheckResult['issues'] = [];
@@ -53,19 +89,22 @@ export async function runAudit(siteId: string): Promise<AuditResult> {
     };
 
     // Run plugin checks
-    console.log(`[Audit ${audit.id}] Running plugin checks...`);
+    await updateProgress(supabase, audit.id, AUDIT_STEPS[0].label, AUDIT_STEPS[0].percent);
+    console.log(`[Audit ${audit.id}] ${AUDIT_STEPS[0].label}...`);
     const pluginResult = await runPluginChecks(wpcliConfig);
     rawData.plugins = pluginResult.data as AuditRawData['plugins'];
     allIssues.push(...pluginResult.issues);
 
     // Run database checks
-    console.log(`[Audit ${audit.id}] Running database checks...`);
+    await updateProgress(supabase, audit.id, AUDIT_STEPS[1].label, AUDIT_STEPS[1].percent);
+    console.log(`[Audit ${audit.id}] ${AUDIT_STEPS[1].label}...`);
     const dbResult = await runDatabaseChecks(wpcliConfig);
     rawData.database = dbResult.data as AuditRawData['database'];
     allIssues.push(...dbResult.issues);
 
     // Run performance checks
-    console.log(`[Audit ${audit.id}] Running performance checks...`);
+    await updateProgress(supabase, audit.id, AUDIT_STEPS[2].label, AUDIT_STEPS[2].percent);
+    console.log(`[Audit ${audit.id}] ${AUDIT_STEPS[2].label}...`);
     const perfResult = await runPerformanceChecks({
       cloudflareZoneId: site.cloudflare_zone_id || undefined,
       domain: site.domain,
@@ -74,13 +113,15 @@ export async function runAudit(siteId: string): Promise<AuditResult> {
     allIssues.push(...perfResult.issues);
 
     // Run security checks
-    console.log(`[Audit ${audit.id}] Running security checks...`);
+    await updateProgress(supabase, audit.id, AUDIT_STEPS[3].label, AUDIT_STEPS[3].percent);
+    console.log(`[Audit ${audit.id}] ${AUDIT_STEPS[3].label}...`);
     const securityResult = await runSecurityChecks(wpcliConfig);
     rawData.security = securityResult.data as AuditRawData['security'];
     allIssues.push(...securityResult.issues);
 
     // Run SEO checks
-    console.log(`[Audit ${audit.id}] Running SEO checks...`);
+    await updateProgress(supabase, audit.id, AUDIT_STEPS[4].label, AUDIT_STEPS[4].percent);
+    console.log(`[Audit ${audit.id}] ${AUDIT_STEPS[4].label}...`);
     const seoResult = await runSEOChecks({
       ...wpcliConfig,
       domain: site.domain,
@@ -89,6 +130,7 @@ export async function runAudit(siteId: string): Promise<AuditResult> {
     allIssues.push(...seoResult.issues);
 
     // Calculate health score
+    await updateProgress(supabase, audit.id, AUDIT_STEPS[5].label, AUDIT_STEPS[5].percent);
     const healthScore = calculateHealthScore(allIssues);
 
     // Generate summary

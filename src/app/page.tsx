@@ -11,6 +11,10 @@ export default async function Dashboard() {
   const { data: sites } = await supabase
     .from('site_dashboard')
     .select('*')
+    .not('domain', 'ilike', '%stg%')
+    .not('domain', 'ilike', '%dev%')
+    .not('domain', 'ilike', '%.wpenginepowered.com')
+    .not('domain', 'ilike', '%.wpengine.com')
     .order('name');
 
   const healthyCt = sites?.filter((s) => (s.latest_health_score ?? 0) >= 90).length || 0;
