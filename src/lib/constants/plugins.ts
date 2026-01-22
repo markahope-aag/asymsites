@@ -1,11 +1,22 @@
-// Plugins that should be on every site
+// Plugins that should be on every site (Asymmetric Marketing standard stack)
 export const REQUIRED_PLUGINS = [
-  'wordfence',
-  'wp-optimize',
+  'really-simple-ssl',      // Security
+  'wp-rocket',              // Caching
+  'wp-seopress',            // SEO
+  'gravityforms',           // Forms
+  'wp-mail-smtp',           // Email
 ];
 
 // Plugins commonly used (not required, but expected)
 export const STANDARD_PLUGINS = [
+  // Required plugins (Asymmetric standard)
+  'really-simple-ssl',
+  'wp-rocket',
+  'wp-seopress',
+  'wp-seopress-pro',
+  'gravityforms',
+  'wp-mail-smtp',
+
   // Page builders
   'elementor',
   'elementor-pro',
@@ -15,20 +26,6 @@ export const STANDARD_PLUGINS = [
 
   // Theme
   'astra-addon-plugin',
-
-  // SEO
-  'wordpress-seo', // Yoast
-  'seo-by-rank-math',
-
-  // Forms
-  'wpforms-lite',
-  'gravityforms',
-  'contact-form-7',
-
-  // Security & Performance
-  'wordfence',
-  'wp-optimize',
-  'autoptimize',
 
   // Utilities
   'duplicate-post',
@@ -53,7 +50,10 @@ export const PROBLEMATIC_PLUGINS = [
   { slug: 'revision-control', reason: 'Often misconfigured, causes issues' },
   { slug: 'w3-total-cache', reason: 'Conflicts with WPEngine caching' },
   { slug: 'wp-super-cache', reason: 'Conflicts with WPEngine caching' },
-  { slug: 'all-in-one-seo-pack', reason: 'Use Yoast or RankMath instead (standardization)' },
+  { slug: 'wordfence', reason: 'Use Really Simple Security instead (standardization)' },
+  { slug: 'wordpress-seo', reason: 'Use SEOPress instead (standardization)' },
+  { slug: 'all-in-one-seo-pack', reason: 'Use SEOPress instead (standardization)' },
+  { slug: 'seo-by-rank-math', reason: 'Use SEOPress instead (standardization)' },
 ];
 
 // Plugins that should never be auto-updated

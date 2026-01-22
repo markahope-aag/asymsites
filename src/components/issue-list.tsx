@@ -8,12 +8,59 @@ interface IssueListProps {
   onRunAction?: (issue: Issue) => void;
 }
 
+const CATEGORY_ORDER = ['plugins', 'security', 'performance', 'database', 'seo'] as const;
+
+const CATEGORY_LABELS: Record<string, string> = {
+  plugins: 'Plugins',
+  security: 'Security',
+  performance: 'Performance',
+  database: 'Database',
+  seo: 'SEO',
+};
+
+const CATEGORY_ICONS: Record<string, string> = {
+  plugins: '🔌',
+  security: '🔒',
+  performance: '⚡',
+  database: '🗄️',
+  seo: '🔍',
+};
+
 export function IssueList({ issues, onRunAction }: IssueListProps) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
   const filteredIssues = issues.filter(
     (issue) => filter === 'all' || issue.severity === filter
   );
+
+  // Group issues by category
+  const issuesByCategory = CATEGORY_ORDER.reduce((acc, category) => {
+    const categoryIssues = filteredIssues.filter((i) => i.category === category);
+    if (categoryIssues.length > 0) {
+      acc[category] = categoryIssues;
+    }
+    return acc;
+  }, {} as Record<string, Issue[]>);
+
+  // Add any issues with unknown categories
+  const knownCategories = new Set(CATEGORY_ORDER);
+  const otherIssues = filteredIssues.filter((i) => !knownCategories.has(i.category as typeof CATEGORY_ORDER[number]));
+  if (otherIssues.length > 0) {
+    issuesByCategory['other'] = otherIssues;
+  }
+
+  const toggleCategory = (category: string) => {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
 
   const severityColors = {
     critical: 'border-red-500 bg-red-50',
@@ -25,6 +72,18 @@ export function IssueList({ issues, onRunAction }: IssueListProps) {
     critical: 'bg-red-100 text-red-800',
     warning: 'bg-yellow-100 text-yellow-800',
     info: 'bg-blue-100 text-blue-800',
+  };
+
+  const getCategorySummary = (categoryIssues: Issue[]) => {
+    const critical = categoryIssues.filter((i) => i.severity === 'critical').length;
+    const warning = categoryIssues.filter((i) => i.severity === 'warning').length;
+    const info = categoryIssues.filter((i) => i.severity === 'info').length;
+
+    const parts: string[] = [];
+    if (critical > 0) parts.push(`${critical} critical`);
+    if (warning > 0) parts.push(`${warning} warning`);
+    if (info > 0) parts.push(`${info} info`);
+    return parts.join(', ');
   };
 
   return (
@@ -50,44 +109,72 @@ export function IssueList({ issues, onRunAction }: IssueListProps) {
         ))}
       </div>
 
-      <div className="space-y-3">
-        {filteredIssues.map((issue) => (
-          <div
-            key={issue.id}
-            className={`border-l-4 p-4 rounded-r ${severityColors[issue.severity]}`}
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${severityBadges[issue.severity]}`}
-                  >
-                    {issue.severity}
-                  </span>
-                  <span className="text-xs text-gray-500 uppercase">
-                    {issue.category}
-                  </span>
-                </div>
-                <h4 className="font-medium mt-1">{issue.title}</h4>
-                {issue.description && (
-                  <p className="text-sm text-gray-600 mt-1">{issue.description}</p>
-                )}
-                {issue.recommendation && (
-                  <p className="text-sm text-gray-500 mt-2 italic">
-                    {issue.recommendation}
-                  </p>
-                )}
+      <div className="space-y-4">
+        {Object.entries(issuesByCategory).map(([category, categoryIssues]) => (
+          <div key={category} className="border rounded-lg overflow-hidden">
+            <button
+              onClick={() => toggleCategory(category)}
+              className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl">{CATEGORY_ICONS[category] || '📋'}</span>
+                <span className="font-semibold">
+                  {CATEGORY_LABELS[category] || category.charAt(0).toUpperCase() + category.slice(1)}
+                </span>
+                <span className="text-sm text-gray-500">
+                  ({categoryIssues.length} {categoryIssues.length === 1 ? 'issue' : 'issues'})
+                </span>
               </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500">
+                  {getCategorySummary(categoryIssues)}
+                </span>
+                <span className="text-gray-400">
+                  {collapsedCategories.has(category) ? '▶' : '▼'}
+                </span>
+              </div>
+            </button>
 
-              {issue.auto_fixable && issue.fix_action && onRunAction && (
-                <button
-                  onClick={() => onRunAction(issue)}
-                  className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-                >
-                  Fix
-                </button>
-              )}
-            </div>
+            {!collapsedCategories.has(category) && (
+              <div className="p-4 space-y-3">
+                {categoryIssues.map((issue) => (
+                  <div
+                    key={issue.id}
+                    className={`border-l-4 p-4 rounded-r ${severityColors[issue.severity]}`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs font-medium ${severityBadges[issue.severity]}`}
+                          >
+                            {issue.severity}
+                          </span>
+                        </div>
+                        <h4 className="font-medium mt-1">{issue.title}</h4>
+                        {issue.description && (
+                          <p className="text-sm text-gray-600 mt-1">{issue.description}</p>
+                        )}
+                        {issue.recommendation && (
+                          <p className="text-sm text-gray-500 mt-2 italic">
+                            {issue.recommendation}
+                          </p>
+                        )}
+                      </div>
+
+                      {issue.auto_fixable && issue.fix_action && onRunAction && (
+                        <button
+                          onClick={() => onRunAction(issue)}
+                          className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                        >
+                          Fix
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
 

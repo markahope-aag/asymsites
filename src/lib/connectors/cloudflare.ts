@@ -84,28 +84,125 @@ export async function getAnalytics(
   threats_total: number;
   status_5xx: number;
 }> {
+  // Use the GraphQL API for analytics (more reliable than deprecated dashboard endpoint)
   const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
   const until = new Date().toISOString();
 
-  const data = await cfRequest<{
-    totals: CFAnalytics;
-  }>(`/zones/${zoneId}/analytics/dashboard?since=${since}&until=${until}`);
+  try {
+    // Try the GraphQL API first
+    const query = `
+      query {
+        viewer {
+          zones(filter: { zoneTag: "${zoneId}" }) {
+            httpRequests1hGroups(
+              limit: ${hours}
+              filter: { datetime_geq: "${since}", datetime_lt: "${until}" }
+            ) {
+              sum {
+                requests
+                cachedRequests
+                bytes
+                cachedBytes
+                threats
+                responseStatusMap {
+                  edgeResponseStatus
+                  requests
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
 
-  const totals = data.totals;
-  const requests_total = totals.requests.all || 0;
-  const requests_cached = totals.requests.cached || 0;
+    const response = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+      method: 'POST',
+      headers: {
+        Authorization: getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query }),
+    });
 
-  return {
-    requests_total,
-    requests_cached,
-    cache_hit_ratio: requests_total > 0 ? requests_cached / requests_total : 0,
-    bandwidth_total_mb: (totals.bandwidth.all || 0) / (1024 * 1024),
-    threats_total: totals.threats.all || 0,
-    status_5xx: (totals.requests.http_status?.['500'] || 0) +
-                (totals.requests.http_status?.['502'] || 0) +
-                (totals.requests.http_status?.['503'] || 0) +
-                (totals.requests.http_status?.['504'] || 0),
-  };
+    const result = await response.json();
+
+    if (result.errors && result.errors.length > 0) {
+      throw new Error(result.errors[0].message);
+    }
+
+    const zones = result.data?.viewer?.zones;
+    if (!zones || zones.length === 0) {
+      throw new Error('Zone not found or no data available');
+    }
+
+    const groups = zones[0].httpRequests1hGroups || [];
+
+    // Aggregate all time buckets
+    let requests_total = 0;
+    let requests_cached = 0;
+    let bandwidth_total = 0;
+    let threats_total = 0;
+    let status_5xx = 0;
+
+    for (const group of groups) {
+      const sum = group.sum;
+      requests_total += sum.requests || 0;
+      requests_cached += sum.cachedRequests || 0;
+      bandwidth_total += sum.bytes || 0;
+      threats_total += sum.threats || 0;
+
+      // Count 5xx responses
+      for (const status of sum.responseStatusMap || []) {
+        if (status.edgeResponseStatus >= 500 && status.edgeResponseStatus < 600) {
+          status_5xx += status.requests || 0;
+        }
+      }
+    }
+
+    return {
+      requests_total,
+      requests_cached,
+      cache_hit_ratio: requests_total > 0 ? requests_cached / requests_total : 0,
+      bandwidth_total_mb: bandwidth_total / (1024 * 1024),
+      threats_total,
+      status_5xx,
+    };
+  } catch (graphqlError) {
+    // Fall back to the legacy dashboard endpoint
+    console.log('GraphQL analytics failed, trying legacy endpoint:', graphqlError);
+
+    try {
+      const data = await cfRequest<{
+        totals: CFAnalytics;
+      }>(`/zones/${zoneId}/analytics/dashboard?since=${since}&until=${until}`);
+
+      const totals = data.totals;
+      const requests_total = totals.requests?.all || 0;
+      const requests_cached = totals.requests?.cached || 0;
+
+      return {
+        requests_total,
+        requests_cached,
+        cache_hit_ratio: requests_total > 0 ? requests_cached / requests_total : 0,
+        bandwidth_total_mb: (totals.bandwidth?.all || 0) / (1024 * 1024),
+        threats_total: totals.threats?.all || 0,
+        status_5xx: (totals.requests?.http_status?.['500'] || 0) +
+                    (totals.requests?.http_status?.['502'] || 0) +
+                    (totals.requests?.http_status?.['503'] || 0) +
+                    (totals.requests?.http_status?.['504'] || 0),
+      };
+    } catch (legacyError) {
+      // Provide a more helpful error message
+      const errorMessage = legacyError instanceof Error ? legacyError.message : String(legacyError);
+      if (errorMessage.includes('403') || errorMessage.includes('permission')) {
+        throw new Error('API token lacks analytics permissions. Add "Zone Analytics:Read" permission.');
+      }
+      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        throw new Error('Zone not found. Verify the Cloudflare zone ID is correct.');
+      }
+      throw new Error(`Failed to fetch analytics: ${errorMessage}`);
+    }
+  }
 }
 
 export async function purgeCache(zoneId: string): Promise<void> {

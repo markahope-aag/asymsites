@@ -5,11 +5,48 @@ import {
   verifyChecksums,
   getUserList,
   getOption,
+  getPluginList,
 } from '@/lib/connectors/wpcli';
 import { CheckResult, SecurityAuditData } from '@/lib/types';
 
 export async function runSecurityChecks(config: WPCLIConfig): Promise<CheckResult> {
   const issues: CheckResult['issues'] = [];
+
+  // Check for security plugin (Really Simple Security is the standard)
+  const plugins = await getPluginList(config);
+  const standardSecurityPlugins = ['really-simple-ssl'];
+  const otherSecurityPlugins = ['wordfence', 'sucuri-scanner', 'ithemes-security-pro', 'all-in-one-wp-security-and-firewall'];
+
+  const activeStandardSecurity = plugins.find(
+    (p) => standardSecurityPlugins.includes(p.name) && p.status === 'active'
+  );
+  const activeOtherSecurity = plugins.find(
+    (p) => otherSecurityPlugins.includes(p.name) && p.status === 'active'
+  );
+
+  if (!activeStandardSecurity && !activeOtherSecurity) {
+    issues.push({
+      category: 'security',
+      severity: 'warning',
+      title: 'No security plugin detected',
+      description: 'No security plugin is active.',
+      recommendation: 'Install and configure Really Simple Security (standard plugin).',
+      auto_fixable: false,
+      fix_action: null,
+      fix_params: {},
+    });
+  } else if (!activeStandardSecurity && activeOtherSecurity) {
+    issues.push({
+      category: 'security',
+      severity: 'info',
+      title: `Non-standard security plugin: ${activeOtherSecurity.name}`,
+      description: 'Site is using a different security plugin than the standard (Really Simple Security).',
+      recommendation: 'Consider migrating to Really Simple Security for consistency across sites.',
+      auto_fixable: false,
+      fix_action: null,
+      fix_params: {},
+    });
+  }
 
   // Get WordPress version
   const wpVersion = await getCoreVersion(config);

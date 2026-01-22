@@ -89,17 +89,34 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
         });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       issues.push({
         category: 'performance',
         severity: 'warning',
         title: 'Could not fetch Cloudflare analytics',
-        description: String(error),
-        recommendation: 'Verify Cloudflare zone ID and API token.',
+        description: errorMessage,
+        recommendation: errorMessage.includes('permission')
+          ? 'Update the Cloudflare API token to include "Zone Analytics:Read" permission.'
+          : errorMessage.includes('not found')
+          ? 'Verify the Cloudflare zone ID is correct in the database.'
+          : 'Check that CLOUDFLARE_API_TOKEN is set and has correct permissions.',
         auto_fixable: false,
         fix_action: null,
         fix_params: {},
       });
     }
+  } else {
+    // No Cloudflare zone ID configured
+    issues.push({
+      category: 'performance',
+      severity: 'info',
+      title: 'Cloudflare not configured',
+      description: 'No Cloudflare zone ID is set for this site.',
+      recommendation: 'Run the Cloudflare zone import script or manually add the zone ID.',
+      auto_fixable: false,
+      fix_action: null,
+      fix_params: {},
+    });
   }
 
   // Basic response time check

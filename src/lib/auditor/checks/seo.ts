@@ -67,25 +67,43 @@ export async function runSEOChecks(config: SEOConfig): Promise<CheckResult> {
     });
   }
 
-  // Check for SEO plugin
+  // Check for SEO plugin (SEOPress is the standard)
   const plugins = await getPluginList(config);
-  const seoPlugins = ['wordpress-seo', 'seo-by-rank-math', 'all-in-one-seo-pack'];
-  const activeSEOPlugin = plugins.find(
+  const seoPlugins = ['wp-seopress', 'wp-seopress-pro'];
+  const otherSeoPlugins = ['wordpress-seo', 'seo-by-rank-math', 'all-in-one-seo-pack'];
+
+  const activeSEOPress = plugins.find(
     (p) => seoPlugins.includes(p.name) && p.status === 'active'
   );
+  const activeOtherSEO = plugins.find(
+    (p) => otherSeoPlugins.includes(p.name) && p.status === 'active'
+  );
 
-  if (!activeSEOPlugin) {
+  if (!activeSEOPress && !activeOtherSEO) {
     issues.push({
       category: 'seo',
       severity: 'warning',
       title: 'No SEO plugin detected',
-      description: 'No major SEO plugin is active.',
-      recommendation: 'Install and configure Yoast SEO or RankMath.',
+      description: 'No SEO plugin is active.',
+      recommendation: 'Install and configure SEOPress (standard plugin).',
+      auto_fixable: false,
+      fix_action: null,
+      fix_params: {},
+    });
+  } else if (!activeSEOPress && activeOtherSEO) {
+    issues.push({
+      category: 'seo',
+      severity: 'info',
+      title: `Non-standard SEO plugin: ${activeOtherSEO.name}`,
+      description: 'Site is using a different SEO plugin than the standard (SEOPress).',
+      recommendation: 'Consider migrating to SEOPress for consistency across sites.',
       auto_fixable: false,
       fix_action: null,
       fix_params: {},
     });
   }
+
+  const activeSEOPlugin = activeSEOPress || activeOtherSEO;
 
   const data: SEOAuditData = {
     has_robots_txt: hasRobotsTxt,
