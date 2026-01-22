@@ -69,7 +69,8 @@ export async function runSEOChecks(config: SEOConfig): Promise<CheckResult> {
 
   // Check for SEO plugin (SEOPress is the standard)
   const plugins = await getPluginList(config);
-  const seoPlugins = ['wp-seopress', 'wp-seopress-pro'];
+  // SEOPress can have various slugs depending on version/install
+  const seoPlugins = ['wp-seopress', 'wp-seopress-pro', 'seopress', 'seopress-pro'];
   const otherSeoPlugins = ['wordpress-seo', 'seo-by-rank-math', 'all-in-one-seo-pack'];
 
   const activeSEOPress = plugins.find(

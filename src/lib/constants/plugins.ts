@@ -2,7 +2,7 @@
 export const REQUIRED_PLUGINS = [
   'really-simple-ssl',      // Security
   'wp-rocket',              // Caching
-  'wp-seopress',            // SEO
+  'seopress',               // SEO (folder name is 'seopress')
   'gravityforms',           // Forms
   'wp-mail-smtp',           // Email
 ];
@@ -12,6 +12,8 @@ export const STANDARD_PLUGINS = [
   // Required plugins (Asymmetric standard)
   'really-simple-ssl',
   'wp-rocket',
+  'seopress',
+  'seopress-pro',
   'wp-seopress',
   'wp-seopress-pro',
   'gravityforms',
