@@ -84,7 +84,9 @@ export interface PerformanceAuditData {
     status_4xx_24h: number;
     ssl_encrypted_requests: number;
     bot_requests: number;
+    bot_score_avg: number;
     countries_top: Array<{ country: string; requests: number }>;
+    ssl_protocol_breakdown: Record<string, number>;
   };
   wpengine?: {
     cache_hit_ratio: number;

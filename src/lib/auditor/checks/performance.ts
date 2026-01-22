@@ -30,7 +30,9 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
         status_4xx_24h: cfAnalytics.status_4xx,
         ssl_encrypted_requests: cfAnalytics.ssl_encrypted_requests,
         bot_requests: cfAnalytics.bot_requests,
+        bot_score_avg: cfAnalytics.bot_score_avg,
         countries_top: cfAnalytics.countries_top,
+        ssl_protocol_breakdown: cfAnalytics.ssl_protocol_breakdown,
       };
 
       // Check Cloudflare edge cache hit ratio (CDN level - different from WPEngine server cache)
@@ -153,6 +155,105 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
           fix_action: null,
           fix_params: {},
         });
+      }
+
+      // Check bot traffic
+      const bot_rate = cfAnalytics.requests_total > 0 ? cfAnalytics.bot_requests / cfAnalytics.requests_total : 0;
+      if (bot_rate > 0.3) { // More than 30% bot traffic
+        issues.push({
+          category: 'performance',
+          severity: 'warning',
+          title: `${cfAnalytics.bot_requests} bot requests in 24h (${Math.round(bot_rate * 100)}% of traffic)`,
+          description: 'High level of bot traffic detected. This may impact server performance.',
+          recommendation: 'Review bot management settings. Consider enabling Bot Fight Mode or custom bot rules.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      } else if (bot_rate > 0.1) { // More than 10% bot traffic
+        issues.push({
+          category: 'performance',
+          severity: 'info',
+          title: `${cfAnalytics.bot_requests} bot requests in 24h (${Math.round(bot_rate * 100)}% of traffic)`,
+          description: 'Moderate bot traffic detected.',
+          recommendation: 'Monitor bot patterns and consider bot management if performance is affected.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      }
+
+      // Geographic traffic insights
+      if (cfAnalytics.countries_top.length > 0) {
+        const topCountry = cfAnalytics.countries_top[0];
+        const topCountryRate = cfAnalytics.requests_total > 0 ? topCountry.requests / cfAnalytics.requests_total : 0;
+        
+        if (topCountryRate > 0.8) { // More than 80% from one country
+          issues.push({
+            category: 'performance',
+            severity: 'info',
+            title: `${Math.round(topCountryRate * 100)}% of traffic from ${topCountry.country}`,
+            description: 'Traffic is highly concentrated in one geographic region.',
+            recommendation: 'Consider regional optimization and ensure CDN coverage is appropriate for your audience.',
+            auto_fixable: false,
+            fix_action: null,
+            fix_params: {},
+          });
+        } else {
+          const countries = cfAnalytics.countries_top.slice(0, 3).map(c => c.country).join(', ');
+          issues.push({
+            category: 'performance',
+            severity: 'info',
+            title: `Global traffic from ${cfAnalytics.countries_top.length} countries`,
+            description: `Top traffic sources: ${countries}. Good geographic distribution.`,
+            recommendation: 'Monitor regional performance and consider geo-specific optimizations if needed.',
+            auto_fixable: false,
+            fix_action: null,
+            fix_params: {},
+          });
+        }
+      }
+
+      // SSL/TLS protocol security analysis
+      const sslProtocols = Object.entries(cfAnalytics.ssl_protocol_breakdown || {});
+      if (sslProtocols.length > 0) {
+        const totalSSLRequests = sslProtocols.reduce((sum, [, count]) => sum + count, 0);
+        
+        // Check for outdated TLS versions
+        const tls10_11_requests = (cfAnalytics.ssl_protocol_breakdown['TLSv1'] || 0) + 
+                                  (cfAnalytics.ssl_protocol_breakdown['TLSv1.1'] || 0);
+        
+        if (tls10_11_requests > 0) {
+          const oldTLSRate = tls10_11_requests / totalSSLRequests;
+          issues.push({
+            category: 'performance',
+            severity: 'warning',
+            title: `${tls10_11_requests} requests using outdated TLS 1.0/1.1 (${Math.round(oldTLSRate * 100)}%)`,
+            description: 'Some clients are using outdated TLS versions with security vulnerabilities.',
+            recommendation: 'Consider deprecating TLS 1.0/1.1 support. Encourage clients to upgrade to TLS 1.2+.',
+            auto_fixable: false,
+            fix_action: null,
+            fix_params: {},
+          });
+        }
+
+        // Check TLS 1.3 adoption
+        const tls13_requests = cfAnalytics.ssl_protocol_breakdown['TLSv1.3'] || 0;
+        if (tls13_requests > 0) {
+          const tls13Rate = tls13_requests / totalSSLRequests;
+          if (tls13Rate > 0.5) {
+            issues.push({
+              category: 'performance',
+              severity: 'info',
+              title: `${Math.round(tls13Rate * 100)}% of SSL traffic using TLS 1.3`,
+              description: 'Excellent SSL security - high adoption of modern TLS 1.3 protocol.',
+              recommendation: 'TLS configuration is optimal. Continue monitoring for security best practices.',
+              auto_fixable: false,
+              fix_action: null,
+              fix_params: {},
+            });
+          }
+        }
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

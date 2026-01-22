@@ -135,6 +135,19 @@ export async function getAnalytics(
                 date
               }
             }
+            httpRequestsAdaptiveGroups(
+              limit: 20
+              filter: { datetime_geq: "${sinceStr}", datetime_lt: "${untilStr}" }
+            ) {
+              count
+              dimensions {
+                clientCountryName
+                botScore
+                botScoreClass
+                clientSSLProtocol
+                clientTLSVersion
+              }
+            }
             firewallEventsAdaptiveGroups(
               limit: 10
               filter: { datetime_geq: "${sinceStr}", datetime_lt: "${untilStr}" }
@@ -143,6 +156,7 @@ export async function getAnalytics(
               dimensions {
                 action
                 source
+                ruleId
               }
             }
           }
@@ -213,7 +227,49 @@ export async function getAnalytics(
       }
     }
 
-    console.log(`[Cloudflare] Got ${requests_total} total requests (${requests_cached} cached) - ${(requests_total > 0 ? (requests_cached / requests_total * 100).toFixed(1) : 0)}% cache hit ratio, ${threats_total + firewall_blocks} threats blocked`);
+    // Process bot analytics, geographic data, and SSL protocols
+    const httpRequestsAdaptive = zones[0].httpRequestsAdaptiveGroups || [];
+    let bot_requests = 0;
+    let bot_score_sum = 0;
+    let bot_score_count = 0;
+    const country_requests: Record<string, number> = {};
+    const ssl_protocols: Record<string, number> = {};
+
+    for (const group of httpRequestsAdaptive) {
+      const count = group.count || 0;
+      const dimensions = group.dimensions;
+
+      // Bot analytics
+      if (dimensions?.botScore !== undefined) {
+        const botScore = parseInt(dimensions.botScore);
+        if (botScore <= 30) { // Cloudflare considers scores <= 30 as likely bots
+          bot_requests += count;
+        }
+        bot_score_sum += botScore * count;
+        bot_score_count += count;
+      }
+
+      // Geographic data
+      if (dimensions?.clientCountryName) {
+        const country = dimensions.clientCountryName;
+        country_requests[country] = (country_requests[country] || 0) + count;
+      }
+
+      // SSL protocol breakdown
+      if (dimensions?.clientTLSVersion) {
+        const protocol = dimensions.clientTLSVersion;
+        ssl_protocols[protocol] = (ssl_protocols[protocol] || 0) + count;
+      }
+    }
+
+    // Calculate average bot score and top countries
+    const bot_score_avg = bot_score_count > 0 ? bot_score_sum / bot_score_count : 0;
+    const countries_top = Object.entries(country_requests)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .map(([country, requests]) => ({ country, requests }));
+
+    console.log(`[Cloudflare] Got ${requests_total} total requests (${requests_cached} cached) - ${(requests_total > 0 ? (requests_cached / requests_total * 100).toFixed(1) : 0)}% cache hit ratio, ${threats_total + firewall_blocks} threats blocked, ${bot_requests} bot requests`);
 
     return {
       requests_total,
@@ -224,11 +280,11 @@ export async function getAnalytics(
       threats_total: threats_total + firewall_blocks,
       status_5xx,
       status_4xx,
-      bot_requests: 0, // Placeholder - requires bot analytics dataset
-      bot_score_avg: 0, // Placeholder - requires bot analytics dataset
-      countries_top: [], // Placeholder - requires geographic breakdown
+      bot_requests,
+      bot_score_avg,
+      countries_top,
       ssl_encrypted_requests,
-      ssl_protocol_breakdown: {}, // Placeholder - requires SSL analytics
+      ssl_protocol_breakdown: ssl_protocols
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
