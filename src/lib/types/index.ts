@@ -3,6 +3,7 @@ export interface Site {
   name: string;
   domain: string;
   wpengine_install_id: string;
+  wpengine_site_name: string | null;
   wpengine_environment: string;
   cloudflare_zone_id: string | null;
   client_name: string | null;

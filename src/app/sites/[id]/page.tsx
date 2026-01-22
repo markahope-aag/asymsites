@@ -83,9 +83,15 @@ export default async function SiteDetailPage({ params }: PageProps) {
       {/* Site info */}
       <div className="bg-white border rounded-lg p-4 mb-8">
         <h2 className="font-semibold mb-3">Site Information</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+          {site.wpengine_site_name && (
+            <div>
+              <span className="text-gray-500">WPEngine Site:</span>
+              <div className="font-medium">{site.wpengine_site_name}</div>
+            </div>
+          )}
           <div>
-            <span className="text-gray-500">WPEngine Install:</span>
+            <span className="text-gray-500">Install ID:</span>
             <div className="font-medium">{site.wpengine_install_id}</div>
           </div>
           <div>
