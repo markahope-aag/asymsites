@@ -1,8 +1,9 @@
 import { getAnalytics } from '@/lib/connectors/cloudflare';
+import { WPCLIConfig } from '@/lib/connectors/wpcli';
 import { THRESHOLDS } from '@/lib/constants/thresholds';
 import { CheckResult, PerformanceAuditData } from '@/lib/types';
 
-interface PerformanceConfig {
+interface PerformanceConfig extends WPCLIConfig {
   cloudflareZoneId?: string;
   domain: string;
 }
@@ -25,14 +26,15 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
         status_5xx_24h: cfAnalytics.status_5xx,
       };
 
-      // Check cache hit ratio
+      // Check Cloudflare edge cache hit ratio (CDN level - different from WPEngine server cache)
+      // Note: This measures CDN edge caching, not server-side WordPress cache (WP Rocket, etc.)
       if (cfAnalytics.cache_hit_ratio < THRESHOLDS.cache_hit_ratio.critical) {
         issues.push({
           category: 'performance',
-          severity: 'critical',
-          title: `Cache hit ratio is ${Math.round(cfAnalytics.cache_hit_ratio * 100)}%`,
-          description: 'Very low cache hit ratio indicates caching issues.',
-          recommendation: 'Review page rules and caching configuration.',
+          severity: 'warning', // Reduced severity since server cache is more important
+          title: `Cloudflare CDN cache hit ratio is ${Math.round(cfAnalytics.cache_hit_ratio * 100)}%`,
+          description: 'Low CDN edge cache hit ratio. Most requests are going to origin server instead of being served from Cloudflare edge cache.',
+          recommendation: 'Review Cloudflare page rules, cache headers from origin, and caching configuration. Note: Server-side cache (WP Rocket) is more critical for performance.',
           auto_fixable: false,
           fix_action: null,
           fix_params: {},
@@ -40,10 +42,10 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
       } else if (cfAnalytics.cache_hit_ratio < THRESHOLDS.cache_hit_ratio.warning) {
         issues.push({
           category: 'performance',
-          severity: 'warning',
-          title: `Cache hit ratio is ${Math.round(cfAnalytics.cache_hit_ratio * 100)}%`,
-          description: 'Cache hit ratio could be improved.',
-          recommendation: 'Review caching strategy.',
+          severity: 'info', // Reduced severity since server cache is more important
+          title: `Cloudflare CDN cache hit ratio is ${Math.round(cfAnalytics.cache_hit_ratio * 100)}%`,
+          description: 'CDN edge cache hit ratio could be improved to reduce load on origin server.',
+          recommendation: 'Review Cloudflare caching strategy and page rules. Server-side cache (WP Rocket) performance is more critical.',
           auto_fixable: false,
           fix_action: null,
           fix_params: {},
@@ -133,6 +135,32 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
       fix_action: null,
       fix_params: {},
     });
+  }
+
+  // WPEngine Server Cache Check
+  // Note: WPEngine doesn't provide cache hit ratio through their API
+  // The 78% cache hit ratio mentioned is likely from WPEngine's dashboard
+  // or server-side cache plugins like WP Rocket
+  try {
+    // TODO: Implement WPEngine server cache statistics retrieval
+    // This would require either:
+    // 1. WPEngine API enhancement to provide cache metrics
+    // 2. WP Rocket WP-CLI commands for cache statistics
+    // 3. Server log analysis for cache hit ratio calculation
+    
+    // For now, add a note that server cache should be monitored separately
+    issues.push({
+      category: 'performance',
+      severity: 'info',
+      title: 'Server cache monitoring needed',
+      description: 'WPEngine server-side cache hit ratio (WP Rocket, object cache) should be monitored separately from CDN cache.',
+      recommendation: 'Monitor WPEngine dashboard for server cache performance. Server cache hit ratio is more critical than CDN cache for WordPress performance.',
+      auto_fixable: false,
+      fix_action: null,
+      fix_params: {},
+    });
+  } catch (error) {
+    console.error('Error checking server cache:', error);
   }
 
   // Basic response time check
