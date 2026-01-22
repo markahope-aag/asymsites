@@ -178,7 +178,7 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
       }
 
       // Check error rate
-      if (wpeInsights.error_rate > 0.05) { // 5% error rate
+      if (wpeInsights.error_rate > THRESHOLDS.error_rate.critical) {
         issues.push({
           category: 'performance',
           severity: 'critical',
@@ -189,16 +189,88 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
           fix_action: null,
           fix_params: {},
         });
+      } else if (wpeInsights.error_rate > THRESHOLDS.error_rate.warning) {
+        issues.push({
+          category: 'performance',
+          severity: 'warning',
+          title: `Error rate: ${Math.round(wpeInsights.error_rate * 100)}%`,
+          description: 'Site is experiencing some errors.',
+          recommendation: 'Monitor error logs and investigate potential issues.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
       }
 
       // Check average latency
-      if (wpeInsights.average_latency_ms > 1000) {
+      if (wpeInsights.average_latency_ms > THRESHOLDS.average_latency_ms.critical) {
+        issues.push({
+          category: 'performance',
+          severity: 'critical',
+          title: `Very high average latency: ${wpeInsights.average_latency_ms}ms`,
+          description: 'Site response times are critically slow.',
+          recommendation: 'Urgent optimization needed. Check database performance, plugin efficiency, and server resources.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      } else if (wpeInsights.average_latency_ms > THRESHOLDS.average_latency_ms.warning) {
         issues.push({
           category: 'performance',
           severity: 'warning',
           title: `High average latency: ${wpeInsights.average_latency_ms}ms`,
           description: 'Site response times are higher than ideal.',
           recommendation: 'Optimize database queries, improve caching, and review plugin performance.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      }
+
+      // Check slow pages count
+      if (wpeInsights.slow_pages_count > THRESHOLDS.slow_pages_count.critical) {
+        issues.push({
+          category: 'performance',
+          severity: 'critical',
+          title: `${wpeInsights.slow_pages_count} slow pages detected`,
+          description: 'Many pages are loading slowly, significantly impacting user experience.',
+          recommendation: 'Urgent optimization needed. Identify and fix slow-loading pages. Check for heavy plugins, large images, or inefficient queries.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      } else if (wpeInsights.slow_pages_count > THRESHOLDS.slow_pages_count.warning) {
+        issues.push({
+          category: 'performance',
+          severity: 'warning',
+          title: `${wpeInsights.slow_pages_count} slow pages detected`,
+          description: 'Multiple pages are loading slowly, which impacts user experience.',
+          recommendation: 'Identify and optimize slow-loading pages. Check for heavy plugins, large images, or inefficient queries.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      } else if (wpeInsights.slow_pages_count > 0) {
+        issues.push({
+          category: 'performance',
+          severity: 'info',
+          title: `${wpeInsights.slow_pages_count} slow page(s) detected`,
+          description: 'Some pages are loading slowly.',
+          recommendation: 'Review slow pages and optimize where possible.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      }
+
+      // Check peak hour traffic (informational - high traffic isn't necessarily bad)
+      if (wpeInsights.page_requests_peak_hour > 10000) {
+        issues.push({
+          category: 'performance',
+          severity: 'info',
+          title: `High peak traffic: ${wpeInsights.page_requests_peak_hour.toLocaleString()} requests/hour`,
+          description: 'Site experiences high traffic during peak hours.',
+          recommendation: 'Monitor server performance during peak hours. Consider upgrading hosting plan if performance degrades.',
           auto_fixable: false,
           fix_action: null,
           fix_params: {},

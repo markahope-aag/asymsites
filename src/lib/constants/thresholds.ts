@@ -26,6 +26,18 @@ export const THRESHOLDS = {
     warning: 10,
     critical: 50,
   },
+  average_latency_ms: {
+    warning: 1000,
+    critical: 2000,
+  },
+  error_rate: {
+    warning: 0.02, // 2%
+    critical: 0.05, // 5%
+  },
+  slow_pages_count: {
+    warning: 5,
+    critical: 10,
+  },
 
   // Plugins
   inactive_plugins: {
