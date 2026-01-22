@@ -63,7 +63,51 @@ export async function runPluginChecks(config: WPCLIConfig): Promise<CheckResult>
 
   // Check for missing required plugins
   for (const required of REQUIRED_PLUGINS) {
-    const found = active.find((p) => p.name === required);
+    // More flexible matching for plugin names
+    const found = active.find((p) => {
+      // Exact match first
+      if (p.name === required) return true;
+      
+      // Handle SEOPress variations
+      if (required === 'seopress') {
+        return p.name === 'wp-seopress' || 
+               p.name === 'seopress-pro' || 
+               p.name === 'wp-seopress-pro' ||
+               p.name.includes('seopress');
+      }
+      
+      // Handle WP Mail SMTP variations
+      if (required === 'wp-mail-smtp') {
+        return p.name === 'wp-mail-smtp' || 
+               p.name === 'wp-mail-smtp-pro' ||
+               p.name === 'wp-smtp' ||
+               p.name.includes('mail-smtp');
+      }
+      
+      // Handle Gravity Forms variations
+      if (required === 'gravityforms') {
+        return p.name === 'gravityforms' || 
+               p.name === 'gravity-forms' ||
+               p.name.includes('gravityforms');
+      }
+      
+      // Handle WP Rocket variations
+      if (required === 'wp-rocket') {
+        return p.name === 'wp-rocket' || p.name.includes('rocket');
+      }
+      
+      // Handle Really Simple Security variations
+      if (required === 'really-simple-security') {
+        return p.name === 'really-simple-security' || 
+               p.name === 'really-simple-ssl' ||  // Legacy name
+               p.name === 'ssl-insecure-content-fixer' ||
+               p.name.includes('simple-security') ||
+               p.name.includes('simple-ssl');
+      }
+      
+      return false;
+    });
+    
     if (!found) {
       issues.push({
         category: 'plugins',
@@ -80,14 +124,25 @@ export async function runPluginChecks(config: WPCLIConfig): Promise<CheckResult>
 
   // Check for problematic plugins
   for (const problematic of PROBLEMATIC_PLUGINS) {
-    const found = active.find((p) => p.name === problematic.slug);
+    const found = active.find((p) => {
+      // Exact match first
+      if (p.name === problematic.slug) return true;
+      
+      // Check for common variations
+      if (problematic.slug === 'wordpress-seo') {
+        return p.name === 'wordpress-seo' || p.name === 'yoast-seo';
+      }
+      
+      return false;
+    });
+    
     if (found) {
       issues.push({
         category: 'plugins',
         severity: 'warning',
-        title: `Problematic plugin active: ${problematic.slug}`,
+        title: `Problematic plugin active: ${found.name}`,
         description: problematic.reason,
-        recommendation: `Consider replacing or removing ${problematic.slug}.`,
+        recommendation: `Consider replacing or removing ${found.name}.`,
         auto_fixable: false,
         fix_action: null,
         fix_params: {},

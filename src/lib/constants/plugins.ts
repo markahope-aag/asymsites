@@ -1,6 +1,6 @@
 // Plugins that should be on every site (Asymmetric Marketing standard stack)
 export const REQUIRED_PLUGINS = [
-  'really-simple-ssl',      // Security
+  'really-simple-security', // Security
   'wp-rocket',              // Caching
   'seopress',               // SEO (folder name is 'seopress')
   'gravityforms',           // Forms
@@ -10,7 +10,7 @@ export const REQUIRED_PLUGINS = [
 // Plugins commonly used (not required, but expected)
 export const STANDARD_PLUGINS = [
   // Required plugins (Asymmetric standard)
-  'really-simple-ssl',
+  'really-simple-security',
   'wp-rocket',
   'seopress',
   'seopress-pro',
@@ -42,6 +42,9 @@ export const STANDARD_PLUGINS = [
 
   // Analytics
   'google-site-kit',
+
+  // Spam protection
+  'akismet',
 ];
 
 // Plugins known to cause problems
