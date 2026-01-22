@@ -4,6 +4,7 @@ import { IssueList } from '@/components/issue-list';
 import { AuditButton } from '@/components/audit-button';
 import { ActionButton } from '@/components/action-button';
 import { MetricsDashboard } from '@/components/metrics-dashboard';
+import { getSitePerformanceTrends } from '@/lib/utils/performance-trends';
 import { Issue } from '@/lib/types';
 import Link from 'next/link';
 
@@ -51,6 +52,17 @@ export default async function SiteDetailPage({ params }: PageProps) {
     .eq('site_id', id)
     .eq('status', 'open')
     .order('severity');
+
+  // Get performance trends (only if we have audit data)
+  let trends = null;
+  if (latestAudit?.raw_data) {
+    try {
+      trends = await getSitePerformanceTrends(id);
+    } catch (error) {
+      console.error('Failed to fetch performance trends:', error);
+      // Continue without trends data
+    }
+  }
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
@@ -151,6 +163,7 @@ export default async function SiteDetailPage({ params }: PageProps) {
       <div className="mb-8">
         <MetricsDashboard 
           auditData={latestAudit?.raw_data || null}
+          trends={trends}
           lastUpdated={latestAudit?.completed_at || latestAudit?.created_at}
         />
       </div>

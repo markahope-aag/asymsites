@@ -1,9 +1,11 @@
 'use client';
 
 import { AuditRawData } from '@/lib/types';
+import { SitePerformanceTrends } from '@/lib/utils/performance-trends';
 
 interface MetricsDashboardProps {
   auditData: AuditRawData | null;
+  trends?: SitePerformanceTrends | null;
   lastUpdated?: string;
 }
 
@@ -12,10 +14,11 @@ interface MetricCardProps {
   value: string | number;
   subtitle?: string;
   trend?: 'up' | 'down' | 'neutral';
+  trendValue?: string;
   color?: 'green' | 'blue' | 'yellow' | 'red' | 'gray';
 }
 
-function MetricCard({ title, value, subtitle, trend, color = 'blue' }: MetricCardProps) {
+function MetricCard({ title, value, subtitle, trend, trendValue, color = 'blue' }: MetricCardProps) {
   const colorClasses = {
     green: 'bg-green-50 border-green-200 text-green-800',
     blue: 'bg-blue-50 border-blue-200 text-blue-800',
@@ -30,10 +33,16 @@ function MetricCard({ title, value, subtitle, trend, color = 'blue' }: MetricCar
     neutral: '→',
   };
 
+  const trendColors = {
+    up: 'text-green-600',
+    down: 'text-red-600',
+    neutral: 'text-gray-500',
+  };
+
   return (
     <div className={`p-4 rounded-lg border ${colorClasses[color]}`}>
       <div className="flex justify-between items-start">
-        <div>
+        <div className="flex-1">
           <h3 className="text-sm font-medium opacity-75">{title}</h3>
           <div className="text-2xl font-bold mt-1">{value}</div>
           {subtitle && (
@@ -41,14 +50,27 @@ function MetricCard({ title, value, subtitle, trend, color = 'blue' }: MetricCar
           )}
         </div>
         {trend && (
-          <span className="text-lg">{trendIcons[trend]}</span>
+          <div className="flex flex-col items-end">
+            <span className="text-lg">{trendIcons[trend]}</span>
+            {trendValue && (
+              <span className={`text-xs font-medium ${trendColors[trend]}`}>
+                {trendValue}
+              </span>
+            )}
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function WPEngineMetrics({ data }: { data: AuditRawData['wpengine'] }) {
+function WPEngineMetrics({ 
+  data, 
+  trends 
+}: { 
+  data: AuditRawData['wpengine']; 
+  trends?: SitePerformanceTrends['wpengine'];
+}) {
   if (!data) {
     return (
       <div className="bg-white border rounded-lg p-6">
@@ -67,18 +89,24 @@ function WPEngineMetrics({ data }: { data: AuditRawData['wpengine'] }) {
           value={`${Math.round(data.cache_hit_ratio * 100)}%`}
           subtitle="Server-side caching efficiency"
           color={data.cache_hit_ratio > 0.7 ? 'green' : data.cache_hit_ratio > 0.5 ? 'yellow' : 'red'}
+          trend={trends?.cache_hit_ratio?.trend}
+          trendValue={trends?.cache_hit_ratio ? `${trends.cache_hit_ratio.changePercent > 0 ? '+' : ''}${trends.cache_hit_ratio.changePercent.toFixed(1)}%` : undefined}
         />
         <MetricCard
           title="Average Latency"
           value={`${data.average_latency_ms}ms`}
           subtitle="Server response time"
           color={data.average_latency_ms < 1000 ? 'green' : data.average_latency_ms < 2000 ? 'yellow' : 'red'}
+          trend={trends?.average_latency_ms?.trend}
+          trendValue={trends?.average_latency_ms ? `${trends.average_latency_ms.changePercent > 0 ? '+' : ''}${trends.average_latency_ms.changePercent.toFixed(1)}%` : undefined}
         />
         <MetricCard
           title="Error Rate"
           value={`${Math.round(data.error_rate * 100)}%`}
           subtitle="Server error percentage"
           color={data.error_rate < 0.02 ? 'green' : data.error_rate < 0.05 ? 'yellow' : 'red'}
+          trend={trends?.error_rate?.trend}
+          trendValue={trends?.error_rate ? `${trends.error_rate.changePercent > 0 ? '+' : ''}${trends.error_rate.changePercent.toFixed(1)}%` : undefined}
         />
         <MetricCard
           title="Peak Hour Requests"
@@ -97,7 +125,13 @@ function WPEngineMetrics({ data }: { data: AuditRawData['wpengine'] }) {
   );
 }
 
-function CloudflareMetrics({ data }: { data: AuditRawData['cloudflare'] }) {
+function CloudflareMetrics({ 
+  data, 
+  trends 
+}: { 
+  data: AuditRawData['cloudflare']; 
+  trends?: SitePerformanceTrends['cloudflare'];
+}) {
   if (!data) {
     return (
       <div className="bg-white border rounded-lg p-6">
@@ -124,12 +158,16 @@ function CloudflareMetrics({ data }: { data: AuditRawData['cloudflare'] }) {
             value={data.requests_24h.toLocaleString()}
             subtitle="24-hour traffic"
             color="blue"
+            trend={trends?.requests_24h?.trend}
+            trendValue={trends?.requests_24h ? `${trends.requests_24h.changePercent > 0 ? '+' : ''}${trends.requests_24h.changePercent.toFixed(1)}%` : undefined}
           />
           <MetricCard
             title="CDN Cache Hit Ratio"
             value={`${Math.round(data.cache_hit_ratio * 100)}%`}
             subtitle="Edge cache efficiency"
             color={data.cache_hit_ratio > 0.8 ? 'green' : data.cache_hit_ratio > 0.6 ? 'yellow' : 'red'}
+            trend={trends?.cache_hit_ratio?.trend}
+            trendValue={trends?.cache_hit_ratio ? `${trends.cache_hit_ratio.changePercent > 0 ? '+' : ''}${trends.cache_hit_ratio.changePercent.toFixed(1)}%` : undefined}
           />
           <MetricCard
             title="Bandwidth"
@@ -155,6 +193,8 @@ function CloudflareMetrics({ data }: { data: AuditRawData['cloudflare'] }) {
             value={data.threats_24h.toLocaleString()}
             subtitle={`${threatRate.toFixed(2)}% of traffic`}
             color={threatRate > 1 ? 'red' : threatRate > 0.1 ? 'yellow' : 'green'}
+            trend={trends?.threats_24h?.trend}
+            trendValue={trends?.threats_24h ? `${trends.threats_24h.changePercent > 0 ? '+' : ''}${trends.threats_24h.changePercent.toFixed(1)}%` : undefined}
           />
           <MetricCard
             title="Server Errors (5xx)"
@@ -311,7 +351,7 @@ function PluginMetrics({ data }: { data: AuditRawData['plugins'] }) {
   );
 }
 
-export function MetricsDashboard({ auditData, lastUpdated }: MetricsDashboardProps) {
+export function MetricsDashboard({ auditData, trends, lastUpdated }: MetricsDashboardProps) {
   if (!auditData) {
     return (
       <div className="bg-white border rounded-lg p-6">
@@ -333,10 +373,10 @@ export function MetricsDashboard({ auditData, lastUpdated }: MetricsDashboardPro
       </div>
 
       {/* WPEngine Performance */}
-      <WPEngineMetrics data={auditData.wpengine} />
+      <WPEngineMetrics data={auditData.wpengine} trends={trends?.wpengine} />
 
       {/* Cloudflare Analytics */}
-      <CloudflareMetrics data={auditData.cloudflare} />
+      <CloudflareMetrics data={auditData.cloudflare} trends={trends?.cloudflare} />
 
       {/* Database Health */}
       <DatabaseMetrics data={auditData.database} />
