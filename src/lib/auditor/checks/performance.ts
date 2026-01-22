@@ -1,4 +1,4 @@
-import { getAnalytics } from '@/lib/connectors/cloudflare';
+import { getAnalytics, CloudflareAnalytics } from '@/lib/connectors/cloudflare';
 import { getPerformanceInsights } from '@/lib/connectors/wpengine';
 import { WPCLIConfig } from '@/lib/connectors/wpcli';
 import { THRESHOLDS } from '@/lib/constants/thresholds';
@@ -24,8 +24,13 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
         cached_requests_24h: cfAnalytics.requests_cached,
         cache_hit_ratio: cfAnalytics.cache_hit_ratio,
         bandwidth_mb: cfAnalytics.bandwidth_total_mb,
+        bandwidth_saved_mb: cfAnalytics.bandwidth_saved_mb,
         threats_24h: cfAnalytics.threats_total,
         status_5xx_24h: cfAnalytics.status_5xx,
+        status_4xx_24h: cfAnalytics.status_4xx,
+        ssl_encrypted_requests: cfAnalytics.ssl_encrypted_requests,
+        bot_requests: cfAnalytics.bot_requests,
+        countries_top: cfAnalytics.countries_top,
       };
 
       // Check Cloudflare edge cache hit ratio (CDN level - different from WPEngine server cache)
@@ -80,13 +85,70 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
       }
 
       // Check for threats
-      if (cfAnalytics.threats_total > 100) {
+      const threat_rate = cfAnalytics.requests_total > 0 ? cfAnalytics.threats_total / cfAnalytics.requests_total : 0;
+      if (threat_rate > 0.01) { // More than 1% threats
+        issues.push({
+          category: 'performance',
+          severity: 'warning',
+          title: `${cfAnalytics.threats_total} threats blocked in 24h (${Math.round(threat_rate * 100)}% of traffic)`,
+          description: 'High level of threats detected and blocked by Cloudflare.',
+          recommendation: 'Review security settings and consider enabling additional protection features.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      } else if (cfAnalytics.threats_total > 100) {
         issues.push({
           category: 'performance',
           severity: 'info',
           title: `${cfAnalytics.threats_total} threats blocked in last 24h`,
           description: 'Cloudflare is blocking malicious traffic.',
           recommendation: 'Monitor threat patterns, consider additional rules if needed.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      }
+
+      // Check 4xx errors (client errors)
+      const error_4xx_threshold = cfAnalytics.requests_total * 0.05; // 5% of total requests
+      if (cfAnalytics.status_4xx > error_4xx_threshold) {
+        issues.push({
+          category: 'performance',
+          severity: 'warning',
+          title: `${cfAnalytics.status_4xx} client errors in 24h (${Math.round(cfAnalytics.status_4xx / cfAnalytics.requests_total * 100)}%)`,
+          description: 'High number of 4xx client errors detected. This may indicate broken links or missing resources.',
+          recommendation: 'Review 404 errors, fix broken links, and check for missing assets.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      }
+
+      // Check SSL encryption rate
+      const ssl_rate = cfAnalytics.requests_total > 0 ? cfAnalytics.ssl_encrypted_requests / cfAnalytics.requests_total : 0;
+      if (ssl_rate < 0.95) { // Less than 95% SSL
+        issues.push({
+          category: 'performance',
+          severity: 'warning',
+          title: `SSL encryption rate is ${Math.round(ssl_rate * 100)}%`,
+          description: 'Some requests are not using SSL encryption.',
+          recommendation: 'Ensure all traffic is redirected to HTTPS. Check for mixed content issues.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      }
+
+      // Check bandwidth savings from caching
+      const bandwidth_savings_rate = cfAnalytics.bandwidth_total_mb > 0 ? cfAnalytics.bandwidth_saved_mb / cfAnalytics.bandwidth_total_mb : 0;
+      if (bandwidth_savings_rate > 0.5) {
+        issues.push({
+          category: 'performance',
+          severity: 'info',
+          title: `Cloudflare saved ${Math.round(cfAnalytics.bandwidth_saved_mb)}MB bandwidth (${Math.round(bandwidth_savings_rate * 100)}%)`,
+          description: 'Good CDN performance - significant bandwidth savings from edge caching.',
+          recommendation: 'CDN is working well. Continue optimizing cache headers for better performance.',
           auto_fixable: false,
           fix_action: null,
           fix_params: {},

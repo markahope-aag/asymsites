@@ -78,8 +78,13 @@ export interface PerformanceAuditData {
     cached_requests_24h: number;
     cache_hit_ratio: number;
     bandwidth_mb: number;
+    bandwidth_saved_mb: number;
     threats_24h: number;
     status_5xx_24h: number;
+    status_4xx_24h: number;
+    ssl_encrypted_requests: number;
+    bot_requests: number;
+    countries_top: Array<{ country: string; requests: number }>;
   };
   wpengine?: {
     cache_hit_ratio: number;
