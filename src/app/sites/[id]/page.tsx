@@ -3,6 +3,7 @@ import { HealthBadge } from '@/components/health-badge';
 import { IssueList } from '@/components/issue-list';
 import { AuditButton } from '@/components/audit-button';
 import { ActionButton } from '@/components/action-button';
+import { MetricsDashboard } from '@/components/metrics-dashboard';
 import { Issue } from '@/lib/types';
 import Link from 'next/link';
 
@@ -140,10 +141,18 @@ export default async function SiteDetailPage({ params }: PageProps) {
         )}
       </div>
 
+      {/* Performance Metrics */}
+      <div className="mb-8">
+        <MetricsDashboard 
+          auditData={latestAudit?.raw_data || null}
+          lastUpdated={latestAudit?.completed_at || latestAudit?.created_at}
+        />
+      </div>
+
       {/* Issues */}
       <div>
         <h2 className="font-semibold text-xl mb-4">
-          Open Issues ({issues?.length || 0})
+          🚨 Open Issues ({issues?.length || 0})
         </h2>
         <IssueList issues={(issues as Issue[]) || []} />
       </div>
