@@ -39,6 +39,85 @@ async function updateProgress(supabase: ReturnType<typeof createServerClient>, a
     .eq('id', auditId);
 }
 
+async function storePerformanceMetrics(
+  supabase: ReturnType<typeof createServerClient>, 
+  siteId: string, 
+  auditId: string, 
+  rawData: AuditRawData
+) {
+  const promises = [];
+
+  // Store WPEngine metrics
+  if (rawData.wpengine) {
+    promises.push(
+      supabase.from('wpengine_metrics').insert({
+        site_id: siteId,
+        audit_id: auditId,
+        cache_hit_ratio: rawData.wpengine.cache_hit_ratio,
+        average_latency_ms: rawData.wpengine.average_latency_ms,
+        error_rate: rawData.wpengine.error_rate,
+        page_requests_peak_hour: rawData.wpengine.page_requests_peak_hour,
+        slow_pages_count: rawData.wpengine.slow_pages_count,
+      })
+    );
+  }
+
+  // Store Cloudflare metrics
+  if (rawData.cloudflare) {
+    promises.push(
+      supabase.from('cloudflare_metrics').insert({
+        site_id: siteId,
+        audit_id: auditId,
+        requests_24h: rawData.cloudflare.requests_24h,
+        cached_requests_24h: rawData.cloudflare.cached_requests_24h,
+        cache_hit_ratio: rawData.cloudflare.cache_hit_ratio,
+        bandwidth_mb: rawData.cloudflare.bandwidth_mb,
+        bandwidth_saved_mb: rawData.cloudflare.bandwidth_saved_mb,
+        threats_24h: rawData.cloudflare.threats_24h,
+        status_5xx_24h: rawData.cloudflare.status_5xx_24h,
+        status_4xx_24h: rawData.cloudflare.status_4xx_24h,
+        ssl_encrypted_requests: rawData.cloudflare.ssl_encrypted_requests,
+        bot_requests: rawData.cloudflare.bot_requests,
+        bot_score_avg: rawData.cloudflare.bot_score_avg,
+      })
+    );
+  }
+
+  // Store Database metrics
+  if (rawData.database) {
+    promises.push(
+      supabase.from('database_metrics').insert({
+        site_id: siteId,
+        audit_id: auditId,
+        total_size_mb: rawData.database.total_size_mb,
+        autoload_size_kb: rawData.database.autoload_size_kb,
+        revision_count: rawData.database.revision_count,
+        transient_count: rawData.database.transient_count,
+      })
+    );
+  }
+
+  // Store Plugin metrics
+  if (rawData.plugins) {
+    promises.push(
+      supabase.from('plugin_metrics').insert({
+        site_id: siteId,
+        audit_id: auditId,
+        total_plugins: rawData.plugins.total,
+        active_plugins: rawData.plugins.active,
+        inactive_plugins: rawData.plugins.inactive,
+        plugins_needing_updates: rawData.plugins.needs_update,
+      })
+    );
+  }
+
+  // Execute all inserts
+  if (promises.length > 0) {
+    await Promise.all(promises);
+    console.log(`[Audit ${auditId}] Stored ${promises.length} metric records`);
+  }
+}
+
 export async function runAudit(siteId: string, existingAuditId?: string): Promise<AuditResult> {
   const supabase = createServerClient();
 
@@ -157,6 +236,9 @@ export async function runAudit(siteId: string, existingAuditId?: string): Promis
         summary,
       })
       .eq('id', audit.id);
+
+    // Store performance metrics in dedicated tables for historical tracking
+    await storePerformanceMetrics(supabase, siteId, audit.id, rawData);
 
     // Close existing open issues for this site (they'll be recreated if still present)
     await supabase

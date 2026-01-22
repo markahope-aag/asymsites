@@ -166,6 +166,63 @@ export interface SiteDashboard extends Site {
   critical_issues_count: number;
 }
 
+// Performance metrics tables for historical tracking
+export interface WPEngineMetrics {
+  id: string;
+  site_id: string;
+  audit_id: string;
+  cache_hit_ratio: number;
+  average_latency_ms: number;
+  error_rate: number;
+  page_requests_peak_hour: number;
+  slow_pages_count: number;
+  recorded_at: string;
+  created_at: string;
+}
+
+export interface CloudflareMetrics {
+  id: string;
+  site_id: string;
+  audit_id: string;
+  requests_24h: number;
+  cached_requests_24h: number;
+  cache_hit_ratio: number;
+  bandwidth_mb: number;
+  bandwidth_saved_mb: number;
+  threats_24h: number;
+  status_5xx_24h: number;
+  status_4xx_24h: number;
+  ssl_encrypted_requests: number;
+  bot_requests: number;
+  bot_score_avg: number | null;
+  recorded_at: string;
+  created_at: string;
+}
+
+export interface DatabaseMetrics {
+  id: string;
+  site_id: string;
+  audit_id: string;
+  total_size_mb: number;
+  autoload_size_kb: number;
+  revision_count: number;
+  transient_count: number;
+  recorded_at: string;
+  created_at: string;
+}
+
+export interface PluginMetrics {
+  id: string;
+  site_id: string;
+  audit_id: string;
+  total_plugins: number;
+  active_plugins: number;
+  inactive_plugins: number;
+  plugins_needing_updates: number;
+  recorded_at: string;
+  created_at: string;
+}
+
 // Check result type used by auditor
 export interface CheckResult {
   data: PluginAuditData | DatabaseAuditData | PerformanceAuditData | SecurityAuditData | SEOAuditData;
