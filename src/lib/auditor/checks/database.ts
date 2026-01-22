@@ -16,12 +16,27 @@ export async function runDatabaseChecks(config: WPCLIConfig): Promise<CheckResul
   const tables = Array.isArray(dbSizeData) ? dbSizeData : [];
 
   let totalSizeMb = 0;
-  const tableInfo = tables.map((t: { Name: string; Rows: number; 'Data_length': number }) => {
-    const sizeMb = (t.Data_length || 0) / (1024 * 1024);
+  const tableInfo = tables.map((t: { Name: string; Size?: string; Rows?: number; 'Data_length'?: number }) => {
+    let sizeBytes = 0;
+    
+    // Handle WP-CLI format: {"Name": "wp_options", "Size": "9977856 B"}
+    if (t.Size && typeof t.Size === 'string') {
+      const match = t.Size.match(/^(\d+)\s*B$/);
+      if (match) {
+        sizeBytes = parseInt(match[1], 10);
+      }
+    }
+    // Handle alternative format: {"Name": "wp_options", "Data_length": 9977856}
+    else if (t.Data_length) {
+      sizeBytes = t.Data_length;
+    }
+    
+    const sizeMb = sizeBytes / (1024 * 1024);
     totalSizeMb += sizeMb;
+    
     return {
       name: t.Name,
-      rows: t.Rows || 0,
+      rows: t.Rows || 0, // Row count not available from wp db size command
       size_mb: Math.round(sizeMb * 100) / 100,
     };
   });
