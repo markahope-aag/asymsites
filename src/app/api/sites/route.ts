@@ -4,9 +4,16 @@ import { createServerClient } from '@/lib/supabase/server';
 export async function GET() {
   const supabase = createServerClient();
 
+  // Only return production sites - exclude staging/dev environments
   const { data, error } = await supabase
     .from('site_dashboard')
     .select('*')
+    .not('domain', 'ilike', '%stg%')
+    .not('domain', 'ilike', '%dev%')
+    .not('domain', 'ilike', '%.wpenginepowered.com')
+    .not('domain', 'ilike', '%.wpengine.com')
+    .neq('wpengine_environment', 'staging')
+    .neq('wpengine_environment', 'development')
     .order('name');
 
   if (error) {

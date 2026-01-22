@@ -285,7 +285,16 @@ export async function runAudit(siteId: string, existingAuditId?: string): Promis
 export async function runAllAudits(): Promise<{ succeeded: number; failed: number }> {
   const supabase = createServerClient();
 
-  const { data: sites } = await supabase.from('sites').select('id, name');
+  // Only audit production sites - exclude staging/dev environments
+  const { data: sites } = await supabase
+    .from('sites')
+    .select('id, name, domain, wpengine_environment')
+    .not('domain', 'ilike', '%stg%')
+    .not('domain', 'ilike', '%dev%')
+    .not('domain', 'ilike', '%.wpenginepowered.com')
+    .not('domain', 'ilike', '%.wpengine.com')
+    .neq('wpengine_environment', 'staging')
+    .neq('wpengine_environment', 'development');
 
   if (!sites || sites.length === 0) {
     return { succeeded: 0, failed: 0 };

@@ -36,6 +36,28 @@ export default async function SiteDetailPage({ params }: PageProps) {
     );
   }
 
+  // Check if this is a staging/development site and redirect to dashboard
+  const isStaging = 
+    site.domain?.includes('stg') ||
+    site.domain?.includes('dev') ||
+    site.domain?.includes('.wpenginepowered.com') ||
+    site.domain?.includes('.wpengine.com') ||
+    site.wpengine_environment === 'staging' ||
+    site.wpengine_environment === 'development';
+
+  if (isStaging) {
+    return (
+      <div className="p-8">
+        <h1 className="text-2xl font-bold">Access Restricted</h1>
+        <p className="text-gray-600 mt-2">This appears to be a staging or development environment.</p>
+        <p className="text-gray-600">Only production sites are accessible through this dashboard.</p>
+        <Link href="/" className="text-blue-600 hover:underline mt-4 inline-block">
+          Back to dashboard
+        </Link>
+      </div>
+    );
+  }
+
   // Get latest audit
   const { data: latestAudit } = await supabase
     .from('audits')
