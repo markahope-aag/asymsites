@@ -1,10 +1,12 @@
 import { getAnalytics } from '@/lib/connectors/cloudflare';
+import { getPerformanceInsights } from '@/lib/connectors/wpengine';
 import { WPCLIConfig } from '@/lib/connectors/wpcli';
 import { THRESHOLDS } from '@/lib/constants/thresholds';
 import { CheckResult, PerformanceAuditData } from '@/lib/types';
 
 interface PerformanceConfig extends WPCLIConfig {
   cloudflareZoneId?: string;
+  wpengineInstallId?: string;
   domain: string;
 }
 
@@ -137,30 +139,100 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
     });
   }
 
-  // WPEngine Server Cache Check
-  // Note: WPEngine doesn't provide cache hit ratio through their API
-  // The 78% cache hit ratio mentioned is likely from WPEngine's dashboard
-  // or server-side cache plugins like WP Rocket
-  try {
-    // TODO: Implement WPEngine server cache statistics retrieval
-    // This would require either:
-    // 1. WPEngine API enhancement to provide cache metrics
-    // 2. WP Rocket WP-CLI commands for cache statistics
-    // 3. Server log analysis for cache hit ratio calculation
-    
-    // For now, add a note that server cache should be monitored separately
+  // WPEngine Server Cache Check (Performance Insights)
+  if (config.wpengineInstallId) {
+    try {
+      const wpeInsights = await getPerformanceInsights(config.wpengineInstallId);
+      
+      data.wpengine = {
+        cache_hit_ratio: wpeInsights.cache_hit_ratio,
+        average_latency_ms: wpeInsights.average_latency_ms,
+        error_rate: wpeInsights.error_rate,
+        page_requests_peak_hour: wpeInsights.page_requests_peak_hour,
+        slow_pages_count: wpeInsights.slow_pages_count,
+      };
+
+      // Check WPEngine server cache hit ratio (more important than CDN cache)
+      if (wpeInsights.cache_hit_ratio < THRESHOLDS.cache_hit_ratio.critical) {
+        issues.push({
+          category: 'performance',
+          severity: 'critical',
+          title: `WPEngine server cache hit ratio is ${Math.round(wpeInsights.cache_hit_ratio * 100)}%`,
+          description: 'Very low server-side cache hit ratio. Most requests are generating pages instead of serving from cache.',
+          recommendation: 'Review WP Rocket configuration, check cache exclusions, and optimize caching strategy. Server cache is critical for WordPress performance.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      } else if (wpeInsights.cache_hit_ratio < THRESHOLDS.cache_hit_ratio.warning) {
+        issues.push({
+          category: 'performance',
+          severity: 'warning',
+          title: `WPEngine server cache hit ratio is ${Math.round(wpeInsights.cache_hit_ratio * 100)}%`,
+          description: 'Server cache hit ratio could be improved to reduce server load and improve performance.',
+          recommendation: 'Review WP Rocket settings and cache exclusions to improve server-side caching.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      }
+
+      // Check error rate
+      if (wpeInsights.error_rate > 0.05) { // 5% error rate
+        issues.push({
+          category: 'performance',
+          severity: 'critical',
+          title: `High error rate: ${Math.round(wpeInsights.error_rate * 100)}%`,
+          description: 'Site is experiencing a high rate of errors.',
+          recommendation: 'Investigate error logs and fix underlying issues causing errors.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      }
+
+      // Check average latency
+      if (wpeInsights.average_latency_ms > 1000) {
+        issues.push({
+          category: 'performance',
+          severity: 'warning',
+          title: `High average latency: ${wpeInsights.average_latency_ms}ms`,
+          description: 'Site response times are higher than ideal.',
+          recommendation: 'Optimize database queries, improve caching, and review plugin performance.',
+          auto_fixable: false,
+          fix_action: null,
+          fix_params: {},
+        });
+      }
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[Performance] WPEngine Performance Insights error:', errorMessage);
+      
+      // Add informational note about WPEngine cache monitoring
+      issues.push({
+        category: 'performance',
+        severity: 'info',
+        title: 'WPEngine Performance Insights unavailable',
+        description: errorMessage,
+        recommendation: 'Monitor WPEngine dashboard for server cache performance (cache hit ratio, latency, error rate). Server cache is more critical than CDN cache for WordPress performance.',
+        auto_fixable: false,
+        fix_action: null,
+        fix_params: {},
+      });
+    }
+  } else {
+    // No WPEngine install ID configured
     issues.push({
       category: 'performance',
       severity: 'info',
-      title: 'Server cache monitoring needed',
-      description: 'WPEngine server-side cache hit ratio (WP Rocket, object cache) should be monitored separately from CDN cache.',
-      recommendation: 'Monitor WPEngine dashboard for server cache performance. Server cache hit ratio is more critical than CDN cache for WordPress performance.',
+      title: 'WPEngine Performance Insights not configured',
+      description: 'No WPEngine install ID is set for this site.',
+      recommendation: 'Add WPEngine install ID to enable server cache monitoring. Server cache hit ratio is more critical than CDN cache for WordPress performance.',
       auto_fixable: false,
       fix_action: null,
       fix_params: {},
     });
-  } catch (error) {
-    console.error('Error checking server cache:', error);
   }
 
   // Basic response time check

@@ -81,6 +81,13 @@ export interface PerformanceAuditData {
     threats_24h: number;
     status_5xx_24h: number;
   };
+  wpengine?: {
+    cache_hit_ratio: number;
+    average_latency_ms: number;
+    error_rate: number;
+    page_requests_peak_hour: number;
+    slow_pages_count: number;
+  };
   response_time_ms?: number;
   ttfb_ms?: number;
 }

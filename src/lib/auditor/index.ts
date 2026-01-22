@@ -28,7 +28,13 @@ async function updateProgress(supabase: ReturnType<typeof createServerClient>, a
     .from('audits')
     .update({
       summary: step,
-      raw_data: { progress: { step, percent } },
+      raw_data: { 
+        progress: { 
+          step, 
+          percent,
+          started_at: new Date().toISOString(),
+        } 
+      },
     })
     .eq('id', auditId);
 }
@@ -106,7 +112,9 @@ export async function runAudit(siteId: string, existingAuditId?: string): Promis
     await updateProgress(supabase, audit.id, AUDIT_STEPS[2].label, AUDIT_STEPS[2].percent);
     console.log(`[Audit ${audit.id}] ${AUDIT_STEPS[2].label}...`);
     const perfResult = await runPerformanceChecks({
+      ...wpcliConfig,
       cloudflareZoneId: site.cloudflare_zone_id || undefined,
+      wpengineInstallId: site.wpengine_install_id || undefined,
       domain: site.domain,
     });
     rawData.performance = perfResult.data as AuditRawData['performance'];

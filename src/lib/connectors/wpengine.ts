@@ -53,6 +53,14 @@ export interface WPEBackup {
   status: string;
 }
 
+export interface WPEPerformanceInsights {
+  cache_hit_ratio: number;
+  average_latency_ms: number;
+  error_rate: number;
+  page_requests_peak_hour: number;
+  slow_pages_count: number;
+}
+
 // API functions
 
 export async function listInstalls(): Promise<{ results: WPEInstall[] }> {
@@ -91,4 +99,18 @@ export async function getStatus(installId: string): Promise<{
   php_version: string;
 }> {
   return wpeRequest(`/installs/${installId}/status`);
+}
+
+export async function getPerformanceInsights(installId: string): Promise<WPEPerformanceInsights> {
+  // Note: This endpoint may not exist yet in WPEngine's API
+  // Based on research, Performance Insights data is available in the dashboard
+  // but may require API enhancement from WPEngine to access programmatically
+  try {
+    const response = await wpeRequest(`/installs/${installId}/performance-insights`);
+    return response;
+  } catch (error) {
+    // Fallback: Return placeholder data with a note
+    console.warn(`[WPEngine] Performance Insights API not available for install ${installId}:`, error);
+    throw new Error('WPEngine Performance Insights API not available. Check WPEngine dashboard for cache hit ratio.');
+  }
 }
