@@ -1,36 +1,127 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AsymSites - WordPress Site Health Dashboard
 
-## Getting Started
+A comprehensive WordPress site health monitoring dashboard built for Asymmetric Marketing. Monitor multiple WordPress sites hosted on WPEngine with Cloudflare integration for performance analytics.
 
-First, run the development server:
+## Features
+
+- **Comprehensive Site Auditing**: Plugin management, database health, performance monitoring, security scanning, and SEO analysis
+- **Real-time Dashboard**: Health scores, issue tracking, and progress monitoring
+- **Cloudflare Integration**: Performance metrics, cache hit ratios, and threat monitoring
+- **WPEngine Integration**: Direct server access via SSH and WP-CLI
+- **Automated Actions**: Plugin updates, cache clearing, and database optimization
+
+## Quick Start
+
+### 1. Environment Setup
+
+Copy the environment template and configure your settings:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Edit `.env.local` with your configuration:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Cloudflare API Token (with Zone:Read and Analytics:Read permissions)
+CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
 
-## Learn More
+# WPEngine SSH Private Key
+WPENGINE_SSH_PRIVATE_KEY="-----BEGIN OPENSSH PRIVATE KEY-----
+your_private_key_content_here
+-----END OPENSSH PRIVATE KEY-----"
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 2. Database Setup
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Run the Supabase migrations:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+# Apply the database schema
+supabase db push
+```
 
-## Deploy on Vercel
+### 3. Import Sites and Zones
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+# Import sites from WPEngine
+npx tsx scripts/import-wpengine-sites.ts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Import and match Cloudflare zones
+npx tsx scripts/import-cloudflare-zones.ts
+
+# Or seed with example data
+npx tsx scripts/seed-sites.ts
+```
+
+### 4. Start Development Server
+
+```bash
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to view the dashboard.
+
+## API Configuration
+
+### Cloudflare API Token
+
+1. Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. Create a custom token with these permissions:
+   - **Zone:Read** - for zone information
+   - **Analytics:Read** - for performance metrics
+3. Include all zones you want to monitor
+
+### WPEngine SSH Setup
+
+1. Generate an SSH key pair:
+   ```bash
+   ssh-keygen -t rsa -b 4096 -f wpengine_key
+   ```
+2. Add the public key (`wpengine_key.pub`) to your WPEngine account
+3. Add the private key content to your `.env.local` file
+
+## Troubleshooting
+
+### Cloudflare API Issues
+
+The app uses Cloudflare's GraphQL API for analytics (the REST Analytics API was sunset). If you encounter issues:
+
+1. **Authentication errors**: Verify your `CLOUDFLARE_API_TOKEN` is correct
+2. **Permission errors**: Ensure your token has `Zone:Read` and `Analytics:Read` permissions
+3. **Zone not found**: Check that zone IDs in the database match your Cloudflare zones
+
+Test your Cloudflare configuration:
+```bash
+node debug-cloudflare.js
+```
+
+### WPEngine SSH Issues
+
+1. **Key format**: Ensure the private key is in OpenSSH format
+2. **Permissions**: Verify the public key is added to your WPEngine account
+3. **Install names**: Check that `wpengine_install_id` matches your actual install names
+
+## Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run test` - Run test suite
+- `npm run lint` - Run ESLint
+
+## Architecture
+
+- **Frontend**: Next.js 16 with React 19 and TypeScript
+- **Database**: Supabase (PostgreSQL)
+- **Styling**: Tailwind CSS 4
+- **APIs**: Cloudflare GraphQL, WPEngine SSH/WP-CLI
+- **Testing**: Vitest
+
+## License
+
+Private project for Asymmetric Marketing.

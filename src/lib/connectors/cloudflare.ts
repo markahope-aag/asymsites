@@ -88,133 +88,111 @@ export async function getAnalytics(
   const since = new Date(Date.now() - hours * 60 * 60 * 1000);
   const until = new Date();
 
-  // Format for REST API (YYYY-MM-DDTHH:MM:SSZ)
+  // Format for GraphQL API (YYYY-MM-DDTHH:MM:SSZ)
   const sinceStr = since.toISOString();
   const untilStr = until.toISOString();
 
   console.log(`[Cloudflare] Fetching analytics for zone ${zoneId}...`);
 
-  // Try the REST analytics/dashboard endpoint first (more widely supported)
+  // Use GraphQL API as primary method (REST Analytics API has been sunset)
   try {
-    const data = await cfRequest<{
-      totals: CFAnalytics;
-    }>(`/zones/${zoneId}/analytics/dashboard?since=${sinceStr}&until=${untilStr}`);
-
-    const totals = data.totals;
-    const requests_total = totals.requests?.all || 0;
-    const requests_cached = totals.requests?.cached || 0;
-
-    console.log(`[Cloudflare] Got ${requests_total} total requests`);
-
-    return {
-      requests_total,
-      requests_cached,
-      cache_hit_ratio: requests_total > 0 ? requests_cached / requests_total : 0,
-      bandwidth_total_mb: (totals.bandwidth?.all || 0) / (1024 * 1024),
-      threats_total: totals.threats?.all || 0,
-      status_5xx: (totals.requests?.http_status?.['500'] || 0) +
-                  (totals.requests?.http_status?.['502'] || 0) +
-                  (totals.requests?.http_status?.['503'] || 0) +
-                  (totals.requests?.http_status?.['504'] || 0),
-    };
-  } catch (restError) {
-    const restErrorMessage = restError instanceof Error ? restError.message : String(restError);
-    console.log(`[Cloudflare] REST API failed: ${restErrorMessage}, trying GraphQL...`);
-
-    // Fall back to GraphQL API
-    try {
-      const query = `
-        query {
-          viewer {
-            zones(filter: { zoneTag: "${zoneId}" }) {
-              httpRequests1hGroups(
-                limit: ${hours}
-                filter: { datetime_geq: "${sinceStr}", datetime_lt: "${untilStr}" }
-              ) {
-                sum {
+    const query = `
+      query {
+        viewer {
+          zones(filter: { zoneTag: "${zoneId}" }) {
+            httpRequests1hGroups(
+              limit: ${hours}
+              filter: { datetime_geq: "${sinceStr}", datetime_lt: "${untilStr}" }
+            ) {
+              sum {
+                requests
+                cachedRequests
+                bytes
+                cachedBytes
+                threats
+                responseStatusMap {
+                  edgeResponseStatus
                   requests
-                  cachedRequests
-                  bytes
-                  cachedBytes
-                  threats
-                  responseStatusMap {
-                    edgeResponseStatus
-                    requests
-                  }
                 }
               }
             }
           }
         }
-      `;
-
-      const response = await fetch('https://api.cloudflare.com/client/v4/graphql', {
-        method: 'POST',
-        headers: {
-          Authorization: getAuthHeader(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query }),
-      });
-
-      const result = await response.json();
-
-      if (result.errors && result.errors.length > 0) {
-        throw new Error(result.errors[0].message);
       }
+    `;
 
-      const zones = result.data?.viewer?.zones;
-      if (!zones || zones.length === 0) {
-        throw new Error('Zone not found or no data available');
-      }
+    const response = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+      method: 'POST',
+      headers: {
+        Authorization: getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query }),
+    });
 
-      const groups = zones[0].httpRequests1hGroups || [];
+    const result = await response.json();
 
-      // Aggregate all time buckets
-      let requests_total = 0;
-      let requests_cached = 0;
-      let bandwidth_total = 0;
-      let threats_total = 0;
-      let status_5xx = 0;
+    if (result.errors && result.errors.length > 0) {
+      throw new Error(result.errors[0].message);
+    }
 
-      for (const group of groups) {
-        const sum = group.sum;
-        requests_total += sum.requests || 0;
-        requests_cached += sum.cachedRequests || 0;
-        bandwidth_total += sum.bytes || 0;
-        threats_total += sum.threats || 0;
+    const zones = result.data?.viewer?.zones;
+    if (!zones || zones.length === 0) {
+      throw new Error('Zone not found or no data available');
+    }
 
-        for (const status of sum.responseStatusMap || []) {
-          if (status.edgeResponseStatus >= 500 && status.edgeResponseStatus < 600) {
-            status_5xx += status.requests || 0;
-          }
+    const groups = zones[0].httpRequests1hGroups || [];
+
+    // Aggregate all time buckets
+    let requests_total = 0;
+    let requests_cached = 0;
+    let bandwidth_total = 0;
+    let threats_total = 0;
+    let status_5xx = 0;
+
+    for (const group of groups) {
+      const sum = group.sum;
+      requests_total += sum.requests || 0;
+      requests_cached += sum.cachedRequests || 0;
+      bandwidth_total += sum.bytes || 0;
+      threats_total += sum.threats || 0;
+
+      for (const status of sum.responseStatusMap || []) {
+        if (status.edgeResponseStatus >= 500 && status.edgeResponseStatus < 600) {
+          status_5xx += status.requests || 0;
         }
       }
-
-      return {
-        requests_total,
-        requests_cached,
-        cache_hit_ratio: requests_total > 0 ? requests_cached / requests_total : 0,
-        bandwidth_total_mb: bandwidth_total / (1024 * 1024),
-        threats_total,
-        status_5xx,
-      };
-    } catch (graphqlError) {
-      // Both APIs failed - provide helpful error
-      const errorMessage = restErrorMessage;
-      console.error(`[Cloudflare] Both REST and GraphQL failed. REST: ${restErrorMessage}`);
-
-      if (errorMessage.includes('10000') || errorMessage.includes('Authentication')) {
-        throw new Error('API token authentication failed. Check CLOUDFLARE_API_TOKEN.');
-      }
-      if (errorMessage.includes('403') || errorMessage.includes('permission') || errorMessage.includes('9109')) {
-        throw new Error('API token lacks analytics permissions. Add "Zone:Read" and "Analytics:Read" permissions.');
-      }
-      if (errorMessage.includes('7003') || errorMessage.includes('Could not route')) {
-        throw new Error('Zone not found. The zone ID may be incorrect.');
-      }
-      throw new Error(`Analytics unavailable: ${errorMessage}`);
     }
+
+    console.log(`[Cloudflare] Got ${requests_total} total requests (${requests_cached} cached)`);
+
+    return {
+      requests_total,
+      requests_cached,
+      cache_hit_ratio: requests_total > 0 ? requests_cached / requests_total : 0,
+      bandwidth_total_mb: bandwidth_total / (1024 * 1024),
+      threats_total,
+      status_5xx,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[Cloudflare] GraphQL API failed: ${errorMessage}`);
+
+    // Provide helpful error messages
+    if (errorMessage.includes('10000') || errorMessage.includes('Authentication')) {
+      throw new Error('API token authentication failed. Check CLOUDFLARE_API_TOKEN.');
+    }
+    if (errorMessage.includes('403') || errorMessage.includes('permission') || errorMessage.includes('9109')) {
+      throw new Error('API token lacks analytics permissions. Add "Zone:Read" and "Analytics:Read" permissions.');
+    }
+    if (errorMessage.includes('7003') || errorMessage.includes('Could not route')) {
+      throw new Error('Zone not found. The zone ID may be incorrect.');
+    }
+    if (errorMessage.includes('ENOTFOUND') || errorMessage.includes('network')) {
+      throw new Error('Network error connecting to Cloudflare API. Check internet connection.');
+    }
+    
+    throw new Error(`Analytics unavailable: ${errorMessage}`);
   }
 }
 

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { runAudit, runAllAudits } from '@/lib/auditor';
 
+// Audits stuck for more than 5 minutes are considered stale
+const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+
 function formatAuditError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
 
@@ -102,4 +105,45 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// Cleanup stuck audits
+export async function DELETE() {
+  const supabase = createServerClient();
+  const staleTime = new Date(Date.now() - STALE_THRESHOLD_MS).toISOString();
+
+  // Find stuck audits (running or pending for more than 5 minutes)
+  const { data: stuckAudits, error: fetchError } = await supabase
+    .from('audits')
+    .select('id, site_id, status, started_at')
+    .in('status', ['running', 'pending'])
+    .lt('started_at', staleTime);
+
+  if (fetchError) {
+    return NextResponse.json({ error: 'Failed to fetch stuck audits' }, { status: 500 });
+  }
+
+  if (!stuckAudits || stuckAudits.length === 0) {
+    return NextResponse.json({ message: 'No stuck audits found', cleaned: 0 });
+  }
+
+  // Mark all stuck audits as failed
+  const { error: updateError } = await supabase
+    .from('audits')
+    .update({
+      status: 'failed',
+      completed_at: new Date().toISOString(),
+      error_message: 'Audit timed out and was automatically cleaned up',
+    })
+    .in('id', stuckAudits.map(a => a.id));
+
+  if (updateError) {
+    return NextResponse.json({ error: 'Failed to update stuck audits' }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    message: `Cleaned up ${stuckAudits.length} stuck audit(s)`,
+    cleaned: stuckAudits.length,
+    audits: stuckAudits.map(a => a.id),
+  });
 }

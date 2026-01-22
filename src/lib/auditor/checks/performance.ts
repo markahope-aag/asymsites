@@ -90,20 +90,36 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Determine severity based on error type
+      const severity = errorMessage.includes('authentication') || 
+                      errorMessage.includes('permission') || 
+                      errorMessage.includes('Zone not found') ? 'warning' : 'info';
+      
+      // Provide specific recommendations based on error
+      let recommendation = 'Check Cloudflare API configuration.';
+      if (errorMessage.includes('authentication') || errorMessage.includes('10000')) {
+        recommendation = 'Verify CLOUDFLARE_API_TOKEN is set correctly in environment variables.';
+      } else if (errorMessage.includes('permission') || errorMessage.includes('9109')) {
+        recommendation = 'Update the Cloudflare API token to include "Zone:Read" and "Analytics:Read" permissions.';
+      } else if (errorMessage.includes('Zone not found') || errorMessage.includes('7003')) {
+        recommendation = 'Verify the Cloudflare zone ID is correct in the database.';
+      } else if (errorMessage.includes('network') || errorMessage.includes('ENOTFOUND')) {
+        recommendation = 'Check internet connection and Cloudflare API availability.';
+      }
+      
       issues.push({
         category: 'performance',
-        severity: 'warning',
+        severity,
         title: 'Could not fetch Cloudflare analytics',
-        description: errorMessage,
-        recommendation: errorMessage.includes('permission')
-          ? 'Update the Cloudflare API token to include "Zone Analytics:Read" permission.'
-          : errorMessage.includes('not found')
-          ? 'Verify the Cloudflare zone ID is correct in the database.'
-          : 'Check that CLOUDFLARE_API_TOKEN is set and has correct permissions.',
+        description: `Cloudflare API error: ${errorMessage}`,
+        recommendation,
         auto_fixable: false,
         fix_action: null,
         fix_params: {},
       });
+      
+      console.log(`[Performance] Cloudflare analytics failed: ${errorMessage}`);
     }
   } else {
     // No Cloudflare zone ID configured

@@ -33,18 +33,26 @@ export async function runWPCLI(
 ): Promise<string> {
   const { format = 'json', timeout = 60000 } = options;
 
-  return new Promise((resolve, reject) => {
+  // Wrap entire operation with a hard timeout to prevent hangs
+  const connectionPromise = new Promise<string>((resolve, reject) => {
     const conn = new Client();
     let output = '';
     let errorOutput = '';
-    let timeoutId: NodeJS.Timeout;
+    let commandTimeoutId: NodeJS.Timeout;
+    let resolved = false;
 
     const cleanup = () => {
-      clearTimeout(timeoutId);
-      conn.end();
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(commandTimeoutId);
+      try {
+        conn.end();
+      } catch {
+        // Ignore cleanup errors
+      }
     };
 
-    timeoutId = setTimeout(() => {
+    commandTimeoutId = setTimeout(() => {
       cleanup();
       reject(new Error(`WP-CLI command timed out after ${timeout}ms`));
     }, timeout);
@@ -85,8 +93,29 @@ export async function runWPCLI(
       reject(new Error(`SSH connection error: ${err.message}`));
     });
 
+    conn.on('close', () => {
+      if (!resolved) {
+        cleanup();
+        reject(new Error('SSH connection closed unexpectedly'));
+      }
+    });
+
+    conn.on('timeout', () => {
+      cleanup();
+      reject(new Error('SSH connection timed out'));
+    });
+
     conn.connect(getSSHConfig(config.installName));
   });
+
+  // Hard timeout wrapper - ensures we never hang indefinitely
+  const hardTimeout = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`SSH operation timed out after ${timeout + 5000}ms (hard timeout)`));
+    }, timeout + 5000);
+  });
+
+  return Promise.race([connectionPromise, hardTimeout]);
 }
 
 // Typed helper functions
