@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 
 interface ActionButtonProps {
   siteId: string;
@@ -38,16 +39,19 @@ export function ActionButton({
         body: JSON.stringify({ siteId, action, params }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Action failed');
+        throw new Error(data.error || data.details || 'Action failed');
       }
 
+      toast.success(data.message || `${label} completed successfully`);
       onComplete?.();
       router.refresh();
     } catch (error) {
       console.error('Action error:', error);
-      alert(`Action failed: ${error}`);
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred';
+      toast.error(message);
     } finally {
       setLoading(false);
     }

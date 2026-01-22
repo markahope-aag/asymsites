@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 
 interface AuditButtonProps {
   siteId?: string;
@@ -11,6 +12,39 @@ interface AuditButtonProps {
 interface AuditProgress {
   step: string;
   percent: number;
+}
+
+function formatErrorMessage(error: string | undefined): string {
+  if (!error) return 'Audit failed due to an unknown error';
+
+  // Make common error messages more user-friendly
+  if (error.includes('Cannot parse privateKey')) {
+    return 'SSH key configuration error. Please check the WPENGINE_SSH_PRIVATE_KEY setting.';
+  }
+  if (error.includes('ETIMEDOUT') || error.includes('timeout')) {
+    return 'Connection timed out. The server may be busy or unreachable.';
+  }
+  if (error.includes('ECONNREFUSED')) {
+    return 'Connection refused. Please check if the server is running.';
+  }
+  if (error.includes('authentication') || error.includes('Permission denied')) {
+    return 'Authentication failed. Please verify your SSH credentials.';
+  }
+  if (error.includes('WP-CLI error')) {
+    // Extract just the meaningful part of WP-CLI errors
+    const match = error.match(/WP-CLI error[^:]*:\s*(.+)/s);
+    if (match) {
+      const details = match[1].trim().split('\n')[0];
+      return `WordPress CLI error: ${details}`;
+    }
+  }
+
+  // Truncate very long error messages
+  if (error.length > 150) {
+    return error.substring(0, 147) + '...';
+  }
+
+  return error;
 }
 
 export function AuditButton({ siteId, onComplete }: AuditButtonProps) {
@@ -32,13 +66,14 @@ export function AuditButton({ siteId, onComplete }: AuditButtonProps) {
         setProgress({ step: 'Complete', percent: 100 });
         setLoading(false);
         setAuditId(null);
+        toast.success(`Audit complete! Health score: ${audit.health_score}/100`);
         onComplete?.();
         router.refresh();
       } else if (audit.status === 'failed') {
         setProgress(null);
         setLoading(false);
         setAuditId(null);
-        alert(`Audit failed: ${audit.error_message}`);
+        toast.error(formatErrorMessage(audit.error_message));
       }
     } catch (error) {
       console.error('Error polling progress:', error);
@@ -82,7 +117,8 @@ export function AuditButton({ siteId, onComplete }: AuditButtonProps) {
       console.error('Audit error:', error);
       setLoading(false);
       setProgress(null);
-      alert(`Audit failed: ${error}`);
+      const message = error instanceof Error ? error.message : 'An unexpected error occurred';
+      toast.error(formatErrorMessage(message));
     }
   };
 

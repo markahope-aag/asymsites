@@ -9,6 +9,29 @@ import {
   flushCache,
 } from '@/lib/connectors/wpcli';
 
+function formatActionError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (message.includes('Cannot parse privateKey')) {
+    return 'SSH key configuration error. Check WPENGINE_SSH_PRIVATE_KEY.';
+  }
+  if (message.includes('ETIMEDOUT') || message.includes('timeout')) {
+    return 'Connection timed out. The server may be busy.';
+  }
+  if (message.includes('ECONNREFUSED')) {
+    return 'Connection refused. Check if the server is running.';
+  }
+  if (message.includes('authentication') || message.includes('Permission denied')) {
+    return 'Authentication failed. Verify your credentials.';
+  }
+  if (message.includes('not found') || message.includes('404')) {
+    return 'Resource not found on the server.';
+  }
+
+  // Truncate very long messages
+  return message.length > 200 ? message.substring(0, 197) + '...' : message;
+}
+
 export async function POST(request: NextRequest) {
   const supabase = createServerClient();
   const body = await request.json();
@@ -63,39 +86,49 @@ export async function POST(request: NextRequest) {
         }
         // Clear WordPress cache
         await flushCache(wpcliConfig);
-        result = { message: 'All caches cleared' };
+        result = { message: `All caches cleared for ${site.name}` };
         break;
 
       case 'update_plugins_staging':
         // Note: This should ideally run on staging environment
-        result = { message: await updateAllPlugins(wpcliConfig) };
+        const updateResult = await updateAllPlugins(wpcliConfig);
+        result = { message: `Plugins updated on ${site.name}`, details: updateResult };
         break;
 
       case 'remove_inactive_plugins':
         const pluginsToRemove = params?.plugins || [];
+        if (pluginsToRemove.length === 0) {
+          throw new Error('No plugins specified for removal');
+        }
         for (const plugin of pluginsToRemove) {
           await deletePlugin(wpcliConfig, plugin);
         }
-        result = { removed: pluginsToRemove };
+        result = {
+          message: `Removed ${pluginsToRemove.length} plugin(s) from ${site.name}`,
+          removed: pluginsToRemove
+        };
         break;
 
       case 'cleanup_database':
         const cleanupResults = await cleanupDatabase(wpcliConfig);
-        result = { results: cleanupResults };
+        result = {
+          message: `Database cleanup completed for ${site.name}`,
+          results: cleanupResults
+        };
         break;
 
       case 'cleanup_revisions':
         // Specific revision cleanup
-        result = { message: 'Revisions cleaned' };
+        result = { message: `Post revisions cleaned up for ${site.name}` };
         break;
 
       case 'cleanup_transients':
         // Specific transient cleanup
-        result = { message: 'Transients cleaned' };
+        result = { message: `Transients cleaned up for ${site.name}` };
         break;
 
       default:
-        throw new Error(`Unknown action: ${action}`);
+        throw new Error(`Unknown action: ${action}. Valid actions: clear_all_cache, update_plugins_staging, remove_inactive_plugins, cleanup_database, cleanup_revisions, cleanup_transients`);
     }
 
     // Update action log
@@ -108,8 +141,10 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', actionLog?.id);
 
-    return NextResponse.json({ success: true, result });
+    return NextResponse.json({ success: true, message: result.message, result });
   } catch (error) {
+    console.error(`Action ${action} failed for site ${site.name}:`, error);
+
     // Update action log with error
     await supabase
       .from('action_logs')
@@ -120,8 +155,9 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', actionLog?.id);
 
+    const userFriendlyError = formatActionError(error);
     return NextResponse.json(
-      { error: 'Action failed', details: String(error) },
+      { error: userFriendlyError, details: String(error) },
       { status: 500 }
     );
   }
