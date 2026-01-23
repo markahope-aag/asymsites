@@ -31,7 +31,7 @@ export async function runWPCLI(
   command: string,
   options: { format?: 'json' | 'csv' | 'table'; timeout?: number } = {}
 ): Promise<string> {
-  const { format = 'json', timeout = 60000 } = options;
+  const { format = 'json', timeout = 120000 } = options; // Increased to 2 minutes
 
   // Wrap entire operation with a hard timeout to prevent hangs
   const connectionPromise = new Promise<string>((resolve, reject) => {
@@ -54,7 +54,7 @@ export async function runWPCLI(
 
     commandTimeoutId = setTimeout(() => {
       cleanup();
-      reject(new Error(`WP-CLI command timed out after ${timeout}ms`));
+      reject(new Error(`WP-CLI command '${command}' timed out after ${timeout}ms on ${config.installName}`));
     }, timeout);
 
     conn.on('ready', () => {
@@ -154,7 +154,7 @@ export async function checkCoreUpdates(config: WPCLIConfig) {
 
 export async function verifyChecksums(config: WPCLIConfig) {
   try {
-    await runWPCLI(config, 'core verify-checksums', { format: 'table' });
+    await runWPCLI(config, 'core verify-checksums', { format: 'table', timeout: 180000 }); // 3 minutes
     return { valid: true, errors: [] };
   } catch (err) {
     return { valid: false, errors: [String(err)] };

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<seospider>
+  <configuration>
+    <form-authentication>
+      <login-url>https://yoursite.com/wp-login.php</login-url>
+      <username-field>log</username-field>
+      <password-field>pwd</password-field>
+      <username>your-wp-username</username>
+      <password>your-wp-password</password>
+      <submit-button>#wp-submit</submit-button>
+      <success-indicator>dashboard</success-indicator>
+    </form-authentication>
+  </configuration>
+</seospider>

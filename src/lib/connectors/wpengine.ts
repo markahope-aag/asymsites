@@ -107,7 +107,7 @@ export async function getPerformanceInsights(installId: string): Promise<WPEPerf
   // but may require API enhancement from WPEngine to access programmatically
   try {
     const response = await wpeRequest(`/installs/${installId}/performance-insights`);
-    return response;
+    return response as WPEPerformanceInsights;
   } catch (error) {
     // Fallback: Return placeholder data with a note
     console.warn(`[WPEngine] Performance Insights API not available for install ${installId}:`, error);

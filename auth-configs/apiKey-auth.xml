@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<seospider>
+  <configuration>
+    <custom-headers>
+      <header name="X-API-Key" value="your-api-key-here" />
+      <header name="Authorization" value="Bearer your-token-here" />
+    </custom-headers>
+  </configuration>
+</seospider>

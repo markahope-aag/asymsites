@@ -4,6 +4,7 @@ import { runDatabaseChecks } from './checks/database';
 import { runPerformanceChecks } from './checks/performance';
 import { runSecurityChecks } from './checks/security';
 import { runSEOChecks } from './checks/seo';
+import { runCrawlChecks } from './checks/crawl';
 import { calculateHealthScore } from './scoring';
 import { CheckResult, AuditRawData } from '@/lib/types';
 
@@ -15,11 +16,12 @@ export interface AuditResult {
 }
 
 const AUDIT_STEPS = [
-  { key: 'plugins', label: 'Checking plugins', percent: 20 },
-  { key: 'database', label: 'Analyzing database', percent: 40 },
-  { key: 'performance', label: 'Testing performance', percent: 60 },
-  { key: 'security', label: 'Security scan', percent: 80 },
-  { key: 'seo', label: 'SEO analysis', percent: 95 },
+  { key: 'plugins', label: 'Checking plugins', percent: 15 },
+  { key: 'database', label: 'Analyzing database', percent: 30 },
+  { key: 'performance', label: 'Testing performance', percent: 45 },
+  { key: 'security', label: 'Security scan', percent: 60 },
+  { key: 'seo', label: 'SEO analysis', percent: 75 },
+  { key: 'crawl', label: 'Comprehensive site analysis', percent: 90 },
   { key: 'complete', label: 'Finalizing', percent: 100 },
 ];
 
@@ -47,38 +49,40 @@ async function storePerformanceMetrics(
 ) {
   const promises = [];
 
-  // Store WPEngine metrics
-  if (rawData.wpengine) {
+  // Store WPEngine metrics - DISABLED (API does not provide Performance Insights)
+  /*
+  if (rawData.performance?.wpengine) {
     promises.push(
       supabase.from('wpengine_metrics').insert({
         site_id: siteId,
         audit_id: auditId,
-        cache_hit_ratio: rawData.wpengine.cache_hit_ratio,
-        average_latency_ms: rawData.wpengine.average_latency_ms,
-        error_rate: rawData.wpengine.error_rate,
-        page_requests_peak_hour: rawData.wpengine.page_requests_peak_hour,
-        slow_pages_count: rawData.wpengine.slow_pages_count,
+        cache_hit_ratio: rawData.performance.wpengine.cache_hit_ratio,
+        average_latency_ms: rawData.performance.wpengine.average_latency_ms,
+        error_rate: rawData.performance.wpengine.error_rate,
+        page_requests_peak_hour: rawData.performance.wpengine.page_requests_peak_hour,
+        slow_pages_count: rawData.performance.wpengine.slow_pages_count,
       })
     );
   }
+  */
 
   // Store Cloudflare metrics
-  if (rawData.cloudflare) {
+  if (rawData.performance?.cloudflare) {
     promises.push(
       supabase.from('cloudflare_metrics').insert({
         site_id: siteId,
         audit_id: auditId,
-        requests_24h: rawData.cloudflare.requests_24h,
-        cached_requests_24h: rawData.cloudflare.cached_requests_24h,
-        cache_hit_ratio: rawData.cloudflare.cache_hit_ratio,
-        bandwidth_mb: rawData.cloudflare.bandwidth_mb,
-        bandwidth_saved_mb: rawData.cloudflare.bandwidth_saved_mb,
-        threats_24h: rawData.cloudflare.threats_24h,
-        status_5xx_24h: rawData.cloudflare.status_5xx_24h,
-        status_4xx_24h: rawData.cloudflare.status_4xx_24h,
-        ssl_encrypted_requests: rawData.cloudflare.ssl_encrypted_requests,
-        bot_requests: rawData.cloudflare.bot_requests,
-        bot_score_avg: rawData.cloudflare.bot_score_avg,
+        requests_24h: rawData.performance.cloudflare.requests_24h,
+        cached_requests_24h: rawData.performance.cloudflare.cached_requests_24h,
+        cache_hit_ratio: rawData.performance.cloudflare.cache_hit_ratio,
+        bandwidth_mb: rawData.performance.cloudflare.bandwidth_mb,
+        bandwidth_saved_mb: rawData.performance.cloudflare.bandwidth_saved_mb,
+        threats_24h: rawData.performance.cloudflare.threats_24h,
+        status_5xx_24h: rawData.performance.cloudflare.status_5xx_24h,
+        status_4xx_24h: rawData.performance.cloudflare.status_4xx_24h,
+        ssl_encrypted_requests: rawData.performance.cloudflare.ssl_encrypted_requests,
+        bot_requests: rawData.performance.cloudflare.bot_requests,
+        bot_score_avg: rawData.performance.cloudflare.bot_score_avg,
       })
     );
   }
@@ -215,6 +219,19 @@ export async function runAudit(siteId: string, existingAuditId?: string): Promis
     });
     rawData.seo = seoResult.data as AuditRawData['seo'];
     allIssues.push(...seoResult.issues);
+
+    // Run crawl checks (Screaming Frog)
+    await updateProgress(supabase, audit.id, AUDIT_STEPS[5].label, AUDIT_STEPS[5].percent);
+    console.log(`[Audit ${audit.id}] ${AUDIT_STEPS[5].label}...`);
+    const crawlResult = await runCrawlChecks({
+      domain: site.domain,
+      wpengine_install_id: site.wpengine_install_id,
+      wpengine_environment: site.wpengine_environment,
+      is_ecommerce: site.is_ecommerce,
+      page_builder: site.page_builder,
+    });
+    rawData.crawl = crawlResult.data as AuditRawData['crawl'];
+    allIssues.push(...crawlResult.issues);
 
     // Calculate health score
     await updateProgress(supabase, audit.id, AUDIT_STEPS[5].label, AUDIT_STEPS[5].percent);

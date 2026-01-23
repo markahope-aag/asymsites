@@ -302,7 +302,9 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
     });
   }
 
-  // WPEngine Server Cache Check (Performance Insights)
+  // WPEngine Server Cache Check (Performance Insights) - DISABLED
+  // WPEngine API does not provide programmatic access to Performance Insights
+  /*
   if (config.wpengineInstallId) {
     try {
       const wpeInsights = await getPerformanceInsights(config.wpengineInstallId);
@@ -469,6 +471,7 @@ export async function runPerformanceChecks(config: PerformanceConfig): Promise<C
       fix_params: {},
     });
   }
+  */
 
   // Basic response time check
   try {

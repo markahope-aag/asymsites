@@ -39,6 +39,16 @@ export const THRESHOLDS = {
     critical: 10,
   },
 
+  // Crawl performance
+  CRAWL_ERROR_RATE_WARNING: 5, // 5% error rate
+  CRAWL_ERROR_RATE_CRITICAL: 10, // 10% error rate
+  AVG_RESPONSE_TIME_WARNING: 2000, // 2 seconds
+  AVG_RESPONSE_TIME_CRITICAL: 4000, // 4 seconds
+  SLOW_PAGES_WARNING: 3, // 3 slow pages
+  SLOW_PAGES_CRITICAL: 8, // 8 slow pages
+  BROKEN_LINKS_WARNING: 5, // 5 broken links
+  BROKEN_LINKS_CRITICAL: 15, // 15 broken links
+
   // Plugins
   inactive_plugins: {
     warning: 3,

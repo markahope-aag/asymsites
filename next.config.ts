@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   // Configure external packages for server components (Next.js 16 syntax)
   serverExternalPackages: ['ssh2'],
   
-  // Empty turbopack config to silence the warning and allow webpack config
+  // Empty turbopack config to allow webpack config
   turbopack: {},
   
   // Webpack configuration for SSH2 compatibility

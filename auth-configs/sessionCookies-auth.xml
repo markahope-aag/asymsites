@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<seospider>
+  <configuration>
+    <cookies>
+      <cookie name="PHPSESSID" value="session-id-here" />
+      <cookie name="wp-settings-1" value="settings-cookie" />
+      <cookie name="wordpress_logged_in" value="login-cookie" />
+    </cookies>
+  </configuration>
+</seospider>

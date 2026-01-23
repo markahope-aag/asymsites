@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<seospider>
+  <configuration>
+    <authentication>
+      <basic>
+        <username>staging-username</username>
+        <password>staging-password</password>
+        <realm>WP Engine</realm>
+      </basic>
+    </authentication>
+  </configuration>
+</seospider>

@@ -34,6 +34,7 @@ export interface AuditRawData {
   performance?: PerformanceAuditData;
   security?: SecurityAuditData;
   seo?: SEOAuditData;
+  crawl?: CrawlAuditData;
 }
 
 export interface PluginAuditData {
@@ -88,13 +89,6 @@ export interface PerformanceAuditData {
     bot_score_avg: number;
     countries_top: Array<{ country: string; requests: number }>;
     ssl_protocol_breakdown: Record<string, number>;
-  };
-  wpengine?: {
-    cache_hit_ratio: number;
-    average_latency_ms: number;
-    error_rate: number;
-    page_requests_peak_hour: number;
-    slow_pages_count: number;
   };
   response_time_ms?: number;
   ttfb_ms?: number;
@@ -223,8 +217,46 @@ export interface PluginMetrics {
   created_at: string;
 }
 
+// Screaming Frog crawl audit data
+export interface CrawlAuditData {
+  crawl_summary: {
+    total_pages: number;
+    crawl_duration_seconds: number;
+    avg_response_time_ms: number;
+    error_rate_percent: number;
+    crawl_completed_at: string;
+  };
+  
+  backend_health: {
+    server_errors_5xx: number;
+    client_errors_4xx: number;
+    slow_pages_count: number;
+    broken_links_count: number;
+    redirect_chains_count: number;
+    large_pages_count: number;
+  };
+  
+  core_web_vitals?: {
+    lcp_avg_ms: number;
+    cls_avg_score: number;
+    fid_avg_ms: number;
+    pages_failing_cwv: number;
+    cwv_pass_rate_percent: number;
+  };
+  
+  performance_issues: Array<{
+    type: 'server_error' | 'slow_page' | 'broken_link' | 'large_page' | 'redirect_chain';
+    url: string;
+    details: string;
+    severity: 'critical' | 'warning' | 'info';
+    response_time_ms?: number;
+    status_code?: number;
+    page_size_kb?: number;
+  }>;
+}
+
 // Check result type used by auditor
 export interface CheckResult {
-  data: PluginAuditData | DatabaseAuditData | PerformanceAuditData | SecurityAuditData | SEOAuditData;
+  data: PluginAuditData | DatabaseAuditData | PerformanceAuditData | SecurityAuditData | SEOAuditData | CrawlAuditData;
   issues: Omit<Issue, 'id' | 'site_id' | 'audit_id' | 'status' | 'resolved_at' | 'resolved_by' | 'created_at'>[];
 }

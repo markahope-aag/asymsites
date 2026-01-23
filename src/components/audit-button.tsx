@@ -12,10 +12,26 @@ interface AuditButtonProps {
 interface AuditProgress {
   step: string;
   percent: number;
+  started_at?: string;
+  estimated_duration?: number;
 }
 
-// Show cancel button after 30 seconds of no progress
-const STALE_PROGRESS_MS = 30000;
+// Step duration estimates (in seconds)
+const STEP_ESTIMATES = {
+  'Starting audit...': 5,
+  'Checking plugins': 30,
+  'Analyzing database': 120, // 2 minutes - can be slow
+  'Testing performance': 45,
+  'Security scan': 90, // 1.5 minutes - checksum verification is slow
+  'SEO analysis': 30,
+  'Finalizing': 15,
+} as const;
+
+// Show concern message after step has been running longer than expected
+const getStaleThreshold = (step: string): number => {
+  const estimate = STEP_ESTIMATES[step as keyof typeof STEP_ESTIMATES] || 60;
+  return estimate * 2000; // 2x the estimate in milliseconds
+};
 
 function formatErrorMessage(error: string | undefined): string {
   if (!error) return 'Audit failed due to an unknown error';
@@ -54,9 +70,9 @@ export function AuditButton({ siteId, onComplete }: AuditButtonProps) {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<AuditProgress | null>(null);
   const [auditId, setAuditId] = useState<string | null>(null);
-  const [showCancel, setShowCancel] = useState(false);
+  const [showConcern, setShowConcern] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const lastProgressRef = useRef<{ percent: number; time: number } | null>(null);
+  const stepStartRef = useRef<{ step: string; time: number } | null>(null);
   const router = useRouter();
 
   const pollProgress = useCallback(async (id: string) => {
@@ -67,23 +83,26 @@ export function AuditButton({ siteId, onComplete }: AuditButtonProps) {
       const audit = await response.json();
 
       if (audit.status === 'running' && audit.raw_data?.progress) {
-        const newPercent = audit.raw_data.progress.percent;
+        const currentStep = audit.raw_data.progress.step;
         setProgress(audit.raw_data.progress);
 
-        // Track progress changes to detect stalls
+        // Track step changes and duration
         const now = Date.now();
-        if (lastProgressRef.current?.percent !== newPercent) {
-          lastProgressRef.current = { percent: newPercent, time: now };
-          setShowCancel(false);
-        } else if (lastProgressRef.current && now - lastProgressRef.current.time > STALE_PROGRESS_MS) {
-          setShowCancel(true);
+        if (!stepStartRef.current || stepStartRef.current.step !== currentStep) {
+          stepStartRef.current = { step: currentStep, time: now };
+          setShowConcern(false);
+        } else {
+          // Check if current step has been running longer than expected
+          const stepDuration = now - stepStartRef.current.time;
+          const threshold = getStaleThreshold(currentStep);
+          setShowConcern(stepDuration > threshold);
         }
       } else if (audit.status === 'completed') {
         setProgress({ step: 'Complete', percent: 100 });
         setLoading(false);
         setAuditId(null);
-        setShowCancel(false);
-        lastProgressRef.current = null;
+        setShowConcern(false);
+        stepStartRef.current = null;
         toast.success(`Audit complete! Health score: ${audit.health_score}/100`);
         onComplete?.();
         router.refresh();
@@ -91,8 +110,8 @@ export function AuditButton({ siteId, onComplete }: AuditButtonProps) {
         setProgress(null);
         setLoading(false);
         setAuditId(null);
-        setShowCancel(false);
-        lastProgressRef.current = null;
+        setShowConcern(false);
+        stepStartRef.current = null;
         toast.error(formatErrorMessage(audit.error_message));
       }
     } catch (error) {
@@ -113,8 +132,8 @@ export function AuditButton({ siteId, onComplete }: AuditButtonProps) {
         setLoading(false);
         setProgress(null);
         setAuditId(null);
-        setShowCancel(false);
-        lastProgressRef.current = null;
+        setShowConcern(false);
+        stepStartRef.current = null;
         router.refresh();
       } else {
         toast.error(result.error || 'Failed to cancel audit');
@@ -137,6 +156,7 @@ export function AuditButton({ siteId, onComplete }: AuditButtonProps) {
   const runAudit = async () => {
     setLoading(true);
     setProgress({ step: 'Starting...', percent: 0 });
+    stepStartRef.current = { step: 'Starting...', time: Date.now() };
 
     try {
       const response = await fetch('/api/audits', {
@@ -157,6 +177,7 @@ export function AuditButton({ siteId, onComplete }: AuditButtonProps) {
         // All audits completed
         setLoading(false);
         setProgress(null);
+        stepStartRef.current = null;
         onComplete?.();
         router.refresh();
       }
@@ -164,10 +185,12 @@ export function AuditButton({ siteId, onComplete }: AuditButtonProps) {
       console.error('Audit error:', error);
       setLoading(false);
       setProgress(null);
+      stepStartRef.current = null;
       const message = error instanceof Error ? error.message : 'An unexpected error occurred';
       toast.error(formatErrorMessage(message));
     }
   };
+
 
   return (
     <div className="flex flex-col items-end gap-2">
@@ -180,11 +203,11 @@ export function AuditButton({ siteId, onComplete }: AuditButtonProps) {
           {loading ? 'Running...' : siteId ? 'Run Audit' : 'Audit All Sites'}
         </button>
 
-        {showCancel && (
+        {showConcern && (
           <button
             onClick={cancelAudit}
             disabled={cancelling}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+            className="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50"
           >
             {cancelling ? 'Cancelling...' : 'Cancel'}
           </button>
@@ -192,21 +215,42 @@ export function AuditButton({ siteId, onComplete }: AuditButtonProps) {
       </div>
 
       {loading && progress && (
-        <div className="w-64">
+        <div className="w-72">
           <div className="flex justify-between text-sm text-gray-600 mb-1">
-            <span>{progress.step}</span>
+            <span className="font-medium">{progress.step}</span>
             <span>{progress.percent}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
             <div
               className="bg-blue-600 h-2 rounded-full transition-all duration-300"
               style={{ width: `${progress.percent}%` }}
             />
           </div>
-          {showCancel && (
-            <p className="text-xs text-amber-600 mt-1">
-              Audit appears to be stuck. You can cancel and try again.
-            </p>
+          
+          {/* Step duration estimate */}
+          <div className="text-xs text-gray-500">
+            {(() => {
+              const estimate = STEP_ESTIMATES[progress.step as keyof typeof STEP_ESTIMATES];
+              if (estimate) {
+                const minutes = Math.floor(estimate / 60);
+                const seconds = estimate % 60;
+                const timeStr = minutes > 0 
+                  ? `${minutes}m ${seconds}s` 
+                  : `${seconds}s`;
+                return `Expected duration: ~${timeStr}`;
+              }
+              return 'Processing...';
+            })()}
+          </div>
+          
+          {/* Show concern message if taking longer than expected */}
+          {showConcern && (
+            <div className="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+              <div className="flex items-center gap-1">
+                <span>⏳</span>
+                <span>This step is taking longer than usual. Large sites or slow servers can cause delays.</span>
+              </div>
+            </div>
           )}
         </div>
       )}
